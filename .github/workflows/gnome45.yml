@@ -128,8 +128,14 @@ jobs:
       
       - name: Install Dependencies
         run: |
-          dnf update -y
-          dnf install -y \
+          # Configure apt for noninteractive
+          export DEBIAN_FRONTEND=noninteractive
+          
+          # Update package lists
+          apt-get update
+          
+          # Install packages
+          apt-get install -y \
             gjs \
             gnome-shell \
             jq \
@@ -167,8 +173,14 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          dnf update -y
-          dnf install -y \
+          # Configure apt for noninteractive
+          export DEBIAN_FRONTEND=noninteractive
+          
+          # Update package lists
+          apt-get update
+          
+          # Install packages
+          apt-get install -y \
             zip \
             jq \
             gjs \
