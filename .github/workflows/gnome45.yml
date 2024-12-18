@@ -119,9 +119,9 @@ jobs:
 
   validate-gnome45:
     name: Validate GNOME 45
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     container:
-      image: ghcr.io/gnome/gnome-runtime-images:45
+      image: ubuntu:mantic
     
     steps:
       - uses: actions/checkout@v4
@@ -158,9 +158,9 @@ jobs:
   build-gnome45:
     name: Build GNOME 45
     needs: [test-gnome45, validate-gnome45]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     container:
-      image: ghcr.io/gnome/gnome-runtime-images:45
+      image: ubuntu:mantic
     
     steps:
       - uses: actions/checkout@v4

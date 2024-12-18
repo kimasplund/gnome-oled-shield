@@ -22,7 +22,7 @@ jobs:
         display-server: ['x11', 'wayland']
     runs-on: ubuntu-24.04
     container:
-      image: ubuntu:plucky
+      image: ubuntu:oracular
       options: >-
         --privileged
         -v /sys/fs/cgroup:/sys/fs/cgroup:rw
@@ -37,22 +37,25 @@ jobs:
           cat /etc/os-release
           uname -a
           
-          # Enable GNOME nightly repositories
-          dnf install -y dnf-plugins-core
-          dnf copr enable -y gnome/gnome-nightly
+          # Configure apt for noninteractive
+          export DEBIAN_FRONTEND=noninteractive
+          
+          # Add GNOME Team PPA for latest GNOME packages
+          apt-get update
+          apt-get install -y software-properties-common gpg-agent
+          add-apt-repository -y ppa:gnome3-team/gnome3-staging
+          add-apt-repository -y ppa:gnome3-team/gnome3
           
           # Update package lists
-          dnf update -y
+          apt-get update
           
           # Install GNOME 47 packages
-          dnf group install -y "GNOME Desktop"
-          dnf install -y \
+          apt-get install -y \
             gjs \
             gnome-shell \
-            ${{ matrix.display-server == 'x11' && 'xorg-x11-server-Xvfb' || 'wayland-protocols' }} \
-            mesa-dri-drivers \
+            ${{ matrix.display-server == 'x11' && 'xvfb' || 'wayland-protocols' }} \
+            mesa-utils \
             dbus-x11 \
-            which \
             procps \
             git \
             nodejs \
@@ -62,10 +65,12 @@ jobs:
             gnome-session \
             systemd \
             dbus \
-            dbus-daemon \
-            dbus-tools \
-            dbus-x11
+            libdbus-1-3 \
+            at-spi2-core
 
+          # Verify GNOME version
+          gnome-shell --version
+          
           # Setup systemd
           systemctl start dbus
 
@@ -148,6 +153,7 @@ jobs:
           pkill dbus-monitor
           ps aux > logs/processes.log
           env > logs/environment.log
+          gnome-shell --version > logs/gnome-version.log
 
       - name: Upload Test Logs
         if: always()
@@ -160,20 +166,25 @@ jobs:
     name: Validate GNOME 47
     runs-on: ubuntu-24.04
     container:
-      image: ubuntu:plucky
+      image: ubuntu:oracular
     
     steps:
       - uses: actions/checkout@v4
       
       - name: Install Dependencies
         run: |
-          # Enable GNOME nightly repositories
-          dnf install -y dnf-plugins-core
-          dnf copr enable -y gnome/gnome-nightly
+          # Configure apt for noninteractive
+          export DEBIAN_FRONTEND=noninteractive
+          
+          # Add GNOME Team PPA
+          apt-get update
+          apt-get install -y software-properties-common gpg-agent
+          add-apt-repository -y ppa:gnome3-team/gnome3-staging
+          add-apt-repository -y ppa:gnome3-team/gnome3
           
           # Update and install packages
-          dnf update -y
-          dnf install -y \
+          apt-get update
+          apt-get install -y \
             gjs \
             gnome-shell \
             jq \
@@ -211,20 +222,25 @@ jobs:
     needs: [test-gnome47, validate-gnome47]
     runs-on: ubuntu-24.04
     container:
-      image: ubuntu:plucky
+      image: ubuntu:oracular
     
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Dependencies
         run: |
-          # Enable GNOME nightly repositories
-          dnf install -y dnf-plugins-core
-          dnf copr enable -y gnome/gnome-nightly
+          # Configure apt for noninteractive
+          export DEBIAN_FRONTEND=noninteractive
+          
+          # Add GNOME Team PPA
+          apt-get update
+          apt-get install -y software-properties-common gpg-agent
+          add-apt-repository -y ppa:gnome3-team/gnome3-staging
+          add-apt-repository -y ppa:gnome3-team/gnome3
           
           # Update and install packages
-          dnf update -y
-          dnf install -y \
+          apt-get update
+          apt-get install -y \
             zip \
             jq \
             gjs \

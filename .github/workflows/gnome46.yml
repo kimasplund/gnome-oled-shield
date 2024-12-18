@@ -119,9 +119,9 @@ jobs:
 
   validate-gnome46:
     name: Validate GNOME 46
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     container:
-      image: ghcr.io/gnome/gnome-runtime-images:46
+      image: ubuntu:noble
     
     steps:
       - uses: actions/checkout@v4
@@ -158,9 +158,9 @@ jobs:
   build-gnome46:
     name: Build GNOME 46
     needs: [test-gnome46, validate-gnome46]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     container:
-      image: ghcr.io/gnome/gnome-runtime-images:46
+      image: ubuntu:noble
     
     steps:
       - uses: actions/checkout@v4
