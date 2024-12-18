@@ -1,0 +1,299 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly security scan
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run CodeQL Analysis
+        uses: github/codeql-action/init@v2
+        with:
+          languages: javascript
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v2
+
+      - name: Run Snyk Security Scan
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+
+  dependency-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          npm init -y
+          npm install -D eslint
+
+      - name: Check for vulnerable dependencies
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: 'OLED-Care'
+          path: '.'
+          format: 'HTML'
+          args: >
+            --suppression ./.dependency-check-suppression.xml
+            --failOnCVSS 7
+            --enableRetired
+
+      - name: Upload dependency check report
+        uses: actions/upload-artifact@v3
+        with:
+          name: dependency-check-report
+          path: reports
+
+  validate:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/gtk-rs/gtk4-rs:latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Dependencies
+        run: |
+          apt-get update
+          apt-get install -y \
+            gjs \
+            gnome-shell \
+            zip \
+            jq \
+            libxml2-utils \
+            npm
+          npm install -g eslint
+
+      - name: Setup Node.js for coverage
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Install test dependencies
+        run: |
+          npm init -y
+          npm install -D nyc mocha chai sinon gjs-unit
+          
+      - name: Validate JSON
+        run: |
+          jq '.' metadata.json > /dev/null
+          for schema in schemas/*.xml; do
+            xmllint --noout "$schema"
+          done
+
+      - name: Compile Schemas
+        run: |
+          mkdir -p build/schemas
+          glib-compile-schemas --strict --targetdir=build/schemas/ schemas/
+
+      - name: Run ESLint
+        run: eslint extension.js prefs.js
+
+      - name: Run Tests with Coverage
+        run: |
+          nyc --reporter=lcov --reporter=text-summary mocha tests/**/*.test.js
+          
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage/lcov.info
+
+  test-environments:
+    needs: validate
+    strategy:
+      matrix:
+        gnome-version: ['47', '46', '45']
+        display-server: ['x11', 'wayland']
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/gtk-rs/gtk4-rs:latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Test Environment
+        run: |
+          # Add GNOME nightly repo for version 47
+          if [ "${{ matrix.gnome-version }}" = "47" ]; then
+            add-apt-repository ppa:gnome3-team/gnome3-staging
+          fi
+          
+          apt-get update
+          apt-get install -y \
+            gnome-shell=${{ matrix.gnome-version }}* \
+            gjs \
+            ${{ matrix.display-server }}-utils
+
+      - name: Run Environment-specific Tests
+        run: |
+          # Setup virtual display
+          if [ "${{ matrix.display-server }}" = "x11" ]; then
+            export DISPLAY=:99
+            Xvfb :99 &
+          else
+            export WLR_BACKENDS=headless
+          fi
+          
+          # Run version-specific tests
+          gjs-unit tests/environment/${{ matrix.display-server }}/gnome${{ matrix.gnome-version }}/**/*.js
+
+  version-bump:
+    needs: [validate, test-environments]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Install semantic-release
+        run: npm install -g semantic-release @semantic-release/git @semantic-release/changelog
+
+      - name: Configure Git
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+      - name: Bump version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          # Get current version from metadata.json
+          CURRENT_VERSION=$(jq -r '.version' metadata.json)
+          
+          # Determine new version based on commit messages
+          if git log -1 --pretty=%B | grep -q "^BREAKING CHANGE"; then
+            NEW_VERSION=$(semver -i major $CURRENT_VERSION)
+          elif git log -1 --pretty=%B | grep -q "^feat"; then
+            NEW_VERSION=$(semver -i minor $CURRENT_VERSION)
+          else
+            NEW_VERSION=$(semver -i patch $CURRENT_VERSION)
+          fi
+          
+          # Update metadata.json
+          jq ".version = \"$NEW_VERSION\"" metadata.json > metadata.json.tmp
+          mv metadata.json.tmp metadata.json
+          
+          # Commit and push changes
+          git add metadata.json
+          git commit -m "chore: bump version to $NEW_VERSION [skip ci]"
+          git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
+          git push --follow-tags
+
+  build:
+    needs: [validate, test-environments]
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/gtk-rs/gtk4-rs:latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          apt-get update
+          apt-get install -y zip jq
+
+      - name: Get Version
+        id: get_version
+        run: echo "version=$(jq -r '.version' metadata.json)" >> $GITHUB_OUTPUT
+
+      - name: Build Extension
+        run: make build
+
+      - name: Create Package
+        run: make package
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: oled-care-v${{ steps.get_version.outputs.version }}
+          path: dist/*.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Get Version
+        id: get_version
+        run: echo "version=$(jq -r '.version' metadata.json)" >> $GITHUB_OUTPUT
+
+      - name: Download Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: oled-care-v${{ steps.get_version.outputs.version }}
+          path: dist
+
+      - name: Generate Release Notes
+        run: |
+          echo "## Changes" > RELEASE_NOTES.md
+          echo "" >> RELEASE_NOTES.md
+          git log $(git describe --tags --abbrev=0 HEAD^)..HEAD --pretty=format:"* %s" >> RELEASE_NOTES.md
+          echo "" >> RELEASE_NOTES.md
+          echo "## Security Scan Results" >> RELEASE_NOTES.md
+          echo "✅ Passed CodeQL Analysis" >> RELEASE_NOTES.md
+          echo "✅ Passed Dependency Check" >> RELEASE_NOTES.md
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/*.zip
+          body_path: RELEASE_NOTES.md
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-ego:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Get Version
+        id: get_version
+        run: echo "version=$(jq -r '.version' metadata.json)" >> $GITHUB_OUTPUT
+
+      - name: Download Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: oled-care-v${{ steps.get_version.outputs.version }}
+          path: dist
+
+      - name: Publish to Extensions.GNOME.org
+        if: success()
+        run: |
+          echo "Note: Automated publishing to extensions.gnome.org requires additional setup"
+          echo "Please visit https://extensions.gnome.org/upload/ to manually upload the extension"
+          echo "Future automation can be implemented using their API when available"

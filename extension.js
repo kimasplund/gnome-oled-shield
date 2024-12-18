@@ -7,8 +7,12 @@ const PopupMenu = imports.ui.popupMenu;
 const ExtensionUtils = imports.misc.extensionUtils;
 const Background = imports.ui.background;
 const Dash = imports.ui.dash;
+const Config = imports.misc.config;
+const DisplayManager = imports.ui.displayManager;
 
 const PIXEL_SHIFT_AMOUNT = 1; // pixels to shift
+
+const GNOME_VERSION = parseInt(Config.PACKAGE_VERSION.split('.')[0]);
 
 let OledCareIndicator = GObject.registerClass(
 class OledCareIndicator extends PanelMenu.Button {
@@ -748,6 +752,107 @@ class Extension {
     constructor(uuid) {
         this._uuid = uuid;
         ExtensionUtils.initTranslations();
+        this._versionSpecificInit();
+    }
+
+    _versionSpecificInit() {
+        // Version-specific initializations
+        switch (GNOME_VERSION) {
+            case 47:
+                // GNOME 47 specific features
+                this._initGnome47Features();
+                break;
+            case 46:
+                // GNOME 46 specific features
+                this._initGnome46Features();
+                break;
+            case 45:
+                // GNOME 45 specific features
+                this._initGnome45Features();
+                break;
+            default:
+                log('Unsupported GNOME version: ' + GNOME_VERSION);
+                return;
+        }
+    }
+
+    _initGnome47Features() {
+        // GNOME 47 specific implementations
+        this._useNewDisplayManager = true;
+        this._useNewBackgroundManager = true;
+        this._usePortalAPI = true;
+    }
+
+    _initGnome46Features() {
+        // GNOME 46 specific implementations
+        this._useNewDisplayManager = true;
+        this._useNewBackgroundManager = true;
+        this._usePortalAPI = false;
+    }
+
+    _initGnome45Features() {
+        // GNOME 45 specific implementations
+        this._useNewDisplayManager = false;
+        this._useNewBackgroundManager = false;
+        this._usePortalAPI = false;
+    }
+
+    _getDisplayManager() {
+        if (this._useNewDisplayManager) {
+            return new DisplayManager.DisplayManager();
+        } else {
+            return Meta.MonitorManager.get();
+        }
+    }
+
+    _getBackgroundManager() {
+        if (this._useNewBackgroundManager) {
+            return new Background.BackgroundManager();
+        } else {
+            return Main.layoutManager._backgroundGroup;
+        }
+    }
+
+    // Version-specific method for handling screen dimming
+    _setScreenDimming(level) {
+        if (GNOME_VERSION >= 46) {
+            // New API in GNOME 46+
+            this._setBrightnessLevel(level);
+        } else {
+            // Legacy method for GNOME 45
+            this._setLegacyBrightnessLevel(level);
+        }
+    }
+
+    // Version-specific method for handling window dimming
+    _setWindowDimming(window, level) {
+        if (GNOME_VERSION >= 47) {
+            // New window effects API in GNOME 47
+            this._setWindowEffectLevel(window, level);
+        } else {
+            // Legacy method for GNOME 45/46
+            this._setLegacyWindowDimLevel(window, level);
+        }
+    }
+
+    // Version-specific method for pixel shifting
+    _applyPixelShift(offset) {
+        if (GNOME_VERSION >= 46) {
+            // New transformation API in GNOME 46+
+            this._applyNewTransformation(offset);
+        } else {
+            // Legacy transformation for GNOME 45
+            this._applyLegacyTransformation(offset);
+        }
+    }
+
+    // Version-specific cleanup
+    cleanup() {
+        if (GNOME_VERSION >= 46) {
+            this._cleanupNewAPI();
+        } else {
+            this._cleanupLegacy();
+        }
     }
 
     enable() {
@@ -758,6 +863,174 @@ class Extension {
     disable() {
         this._indicator.destroy();
         this._indicator = null;
+    }
+
+    _setBrightnessLevel(level) {
+        this._lastBrightnessMethod = 'new';
+        if (Shell.WindowTracker.get_default().focus_app?.is_on_wayland()) {
+            this._lastBrightnessMethod = 'new-wayland';
+            if (this._usePortalAPI) {
+                this._lastBrightnessMethod = 'portal';
+                // Use portal API for Wayland windows
+                const portal = Shell.Screenshot.getPortalProxy();
+                portal.SetBrightnessRemote(level / 100.0);
+            } else {
+                // Use Wayland-specific brightness API
+                Main.layoutManager.monitors.forEach(monitor => {
+                    monitor.brightness = level / 100.0;
+                });
+            }
+        } else {
+            // Use X11 brightness API
+            const brightness = new Gio.Settings({
+                schema: 'org.gnome.settings-daemon.plugins.power'
+            });
+            brightness.set_int('screen-brightness', level);
+        }
+    }
+
+    _setLegacyBrightnessLevel(level) {
+        this._lastBrightnessMethod = 'legacy';
+        if (Shell.WindowTracker.get_default().focus_app?.is_on_wayland()) {
+            this._lastBrightnessMethod = 'legacy-wayland';
+            // Legacy Wayland brightness control
+            Main.layoutManager.monitors.forEach(monitor => {
+                let actor = monitor.actor;
+                let effect = new Clutter.BrightnessContrastEffect();
+                actor.add_effect(effect);
+                effect.set_brightness(level / 100.0);
+            });
+        } else {
+            // Legacy X11 brightness control
+            const proxy = Meta.MonitorManager.get();
+            proxy.set_power_save_mode(level < 50 ? 1 : 0);
+        }
+    }
+
+    _setWindowEffectLevel(window, level) {
+        this._lastWindowEffectMethod = 'new';
+        if (window.meta_window?.is_wayland_client()) {
+            this._lastWindowEffectMethod = this._usePortalAPI ? 'portal-wayland' : 'new-wayland';
+            if (this._usePortalAPI) {
+                // Use portal API for Wayland window effects
+                const portal = Shell.Screenshot.getPortalProxy();
+                portal.SetWindowEffectsRemote(window.meta_window.get_id(), {
+                    brightness: level / 100.0
+                });
+            } else {
+                // Use new Wayland window effects API
+                const actor = window.meta_window.get_compositor_private();
+                const effect = new Clutter.BrightnessContrastEffect();
+                actor.add_effect(effect);
+                effect.set_brightness(level / 100.0);
+            }
+        } else {
+            // Use X11 window effects
+            const actor = window.meta_window.get_compositor_private();
+            const effect = new Meta.BrightnessContrastEffect();
+            actor.add_effect(effect);
+            effect.set_brightness(level / 100.0);
+        }
+    }
+
+    _setLegacyWindowDimLevel(window, level) {
+        this._lastWindowEffectMethod = 'legacy';
+        if (window.meta_window?.is_wayland_client()) {
+            this._lastWindowEffectMethod = 'legacy-wayland';
+            // Legacy Wayland window dimming
+            const actor = window.meta_window.get_compositor_private();
+            const effect = new Clutter.BrightnessContrastEffect();
+            actor.add_effect(effect);
+            effect.set_brightness(level / -100.0);
+        } else {
+            // Legacy X11 window dimming
+            const actor = window.meta_window.get_compositor_private();
+            const effect = new Clutter.BrightnessContrastEffect();
+            actor.add_effect(effect);
+            effect.set_brightness(level / -100.0);
+        }
+    }
+
+    _applyNewTransformation(offset) {
+        this._lastTransformationMethod = 'new';
+        if (Shell.WindowTracker.get_default().focus_app?.is_on_wayland()) {
+            this._lastTransformationMethod = this._usePortalAPI ? 'portal-wayland' : 'new-wayland';
+            if (this._usePortalAPI) {
+                // Use portal API for Wayland transformations
+                const portal = Shell.Screenshot.getPortalProxy();
+                portal.SetScreenTransformationRemote({
+                    x_offset: offset.x,
+                    y_offset: offset.y
+                });
+            } else {
+                // Use new Wayland transformation API
+                Main.layoutManager.monitors.forEach(monitor => {
+                    const actor = monitor.actor;
+                    actor.set_translation(offset.x, offset.y, 0);
+                });
+            }
+        } else {
+            // Use X11 transformation
+            Main.layoutManager.monitors.forEach(monitor => {
+                const actor = monitor.actor;
+                actor.set_position(offset.x, offset.y);
+            });
+        }
+    }
+
+    _applyLegacyTransformation(offset) {
+        this._lastTransformationMethod = 'legacy';
+        if (Shell.WindowTracker.get_default().focus_app?.is_on_wayland()) {
+            this._lastTransformationMethod = 'legacy-wayland';
+            // Legacy Wayland transformation
+            Main.layoutManager.monitors.forEach(monitor => {
+                const actor = monitor.actor;
+                actor.ease({
+                    x: offset.x,
+                    y: offset.y,
+                    duration: 100,
+                    mode: Clutter.AnimationMode.LINEAR
+                });
+            });
+        } else {
+            // Legacy X11 transformation
+            Main.layoutManager.monitors.forEach(monitor => {
+                const actor = monitor.actor;
+                actor.set_position(offset.x, offset.y);
+            });
+        }
+    }
+
+    _cleanupNewAPI() {
+        if (this._usePortalAPI) {
+            // Cleanup portal API resources
+            const portal = Shell.Screenshot.getPortalProxy();
+            portal.ResetRemote();
+        }
+        // Cleanup new API resources
+        Main.layoutManager.monitors.forEach(monitor => {
+            const actor = monitor.actor;
+            actor.remove_all_effects();
+            actor.set_translation(0, 0, 0);
+        });
+    }
+
+    _cleanupLegacy() {
+        // Cleanup legacy resources
+        Main.layoutManager.monitors.forEach(monitor => {
+            const actor = monitor.actor;
+            actor.remove_all_effects();
+            actor.set_position(0, 0);
+        });
+    }
+
+    _initScreenProtection() {
+        if (this._usePortalAPI) {
+            this._lastScreenProtectionMethod = 'portal';
+            // Use portal API for screen recording protection
+            const portal = Shell.Screenshot.getPortalProxy();
+            portal.SetScreenProtectionRemote(true);
+        }
     }
 }
 
