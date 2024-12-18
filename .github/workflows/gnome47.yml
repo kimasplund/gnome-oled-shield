@@ -22,7 +22,8 @@ jobs:
         display-server: ['x11', 'wayland']
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/gnome/gnome-nightly:main
+      # Using Fedora 40 as base for GNOME 47 testing
+      image: fedora:40
       options: --privileged
     
     steps:
@@ -30,10 +31,14 @@ jobs:
       
       - name: Setup Test Environment
         run: |
+          # Enable GNOME nightly repositories
+          dnf install -y dnf-plugins-core
+          dnf copr enable -y gnome/gnome-nightly
+          
           # Update package lists
           dnf update -y
           
-          # Install required packages
+          # Install GNOME 47 packages
           dnf install -y \
             gjs \
             gnome-shell \
@@ -44,7 +49,10 @@ jobs:
             procps \
             git \
             nodejs \
-            npm
+            npm \
+            mutter \
+            gnome-settings-daemon \
+            gnome-session
 
           # Setup DBus
           mkdir -p /run/dbus
@@ -94,6 +102,7 @@ jobs:
         env:
           GSETTINGS_BACKEND: memory
           SHELL: /bin/bash
+          XDG_SESSION_TYPE: ${{ matrix.display-server }}
 
       - name: Upload Coverage
         uses: codecov/codecov-action@v3
@@ -121,13 +130,18 @@ jobs:
     name: Validate GNOME 47
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/gnome/gnome-nightly:main
+      image: fedora:40
     
     steps:
       - uses: actions/checkout@v4
       
       - name: Install Dependencies
         run: |
+          # Enable GNOME nightly repositories
+          dnf install -y dnf-plugins-core
+          dnf copr enable -y gnome/gnome-nightly
+          
+          # Update and install packages
           dnf update -y
           dnf install -y \
             gjs \
@@ -167,13 +181,18 @@ jobs:
     needs: [test-gnome47, validate-gnome47]
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/gnome/gnome-nightly:main
+      image: fedora:40
     
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Dependencies
         run: |
+          # Enable GNOME nightly repositories
+          dnf install -y dnf-plugins-core
+          dnf copr enable -y gnome/gnome-nightly
+          
+          # Update and install packages
           dnf update -y
           dnf install -y \
             zip \
@@ -213,4 +232,4 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: oled-care-gnome47-v${{ steps.get_version.outputs.version }}
-          path: oled-care-gnome47-v${{ steps.get_version.outputs.version }}.zip 
+          path: oled-care-gnome47-v${{ steps.get_version.outputs.version }}.zip
