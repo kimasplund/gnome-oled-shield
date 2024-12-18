@@ -13,26 +13,57 @@ on:
 jobs:
   security-scan:
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run CodeQL Analysis
-        uses: github/codeql-action/init@v2
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
         with:
           languages: javascript
+          config-file: .github/codeql/codeql-config.yml
+          setup-python-dependencies: false
+          tools: latest
+          ram: 4096
+          threads: 2
 
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v2
+      - name: Build CodeQL Database
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript"
+          upload: true
+          output: sarif-results
+          ram: 4096
+          threads: 2
+
+      - name: Upload SARIF results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: sarif-results/javascript.sarif
+          category: "/language:javascript"
+          wait-for-processing: true
 
       - name: Run Snyk Security Scan
         uses: snyk/actions/node@master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          args: --severity-threshold=high
+          args: >
+            --severity-threshold=high
+            --all-projects
+            --detection-depth=4
+            --exclude=tests,dist,build
 
   dependency-check:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      
     steps:
       - uses: actions/checkout@v4
 
@@ -40,6 +71,7 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: '20'
+          cache: 'npm'
 
       - name: Install dependencies
         run: |
@@ -51,17 +83,23 @@ jobs:
         with:
           project: 'OLED-Care'
           path: '.'
-          format: 'HTML'
+          format: 'HTML,SARIF'
           args: >
             --suppression ./.dependency-check-suppression.xml
             --failOnCVSS 7
             --enableRetired
+            --exclude "tests/**" "dist/**" "build/**"
 
       - name: Upload dependency check report
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: reports/dependency-check-report.sarif
+
+      - name: Upload HTML report
         uses: actions/upload-artifact@v3
         with:
           name: dependency-check-report
-          path: reports
+          path: reports/dependency-check-report.html
 
   validate:
     runs-on: ubuntu-latest
@@ -125,36 +163,87 @@ jobs:
         display-server: ['x11', 'wayland']
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/gtk-rs/gtk4-rs:latest
+      # Use official GNOME image for better compatibility
+      image: ghcr.io/gnome/gnome-runtime-images:${{ matrix.gnome-version }}
+      options: --privileged
     
     steps:
       - uses: actions/checkout@v4
       
       - name: Setup Test Environment
         run: |
-          # Add GNOME nightly repo for version 47
-          if [ "${{ matrix.gnome-version }}" = "47" ]; then
-            add-apt-repository ppa:gnome3-team/gnome3-staging
-          fi
+          # Update package lists
+          dnf update -y
           
-          apt-get update
-          apt-get install -y \
-            gnome-shell=${{ matrix.gnome-version }}* \
+          # Install required packages
+          dnf install -y \
             gjs \
-            ${{ matrix.display-server }}-utils
+            gnome-shell \
+            ${{ matrix.display-server == 'x11' && 'xorg-x11-server-Xvfb' || 'wayland-protocols' }} \
+            mesa-dri-drivers \
+            dbus-x11 \
+            which \
+            procps \
+            git
+
+          # Setup DBus
+          mkdir -p /run/dbus
+          dbus-daemon --system --fork
+          
+          # Setup environment variables
+          if [ "${{ matrix.display-server }}" = "x11" ]; then
+            export DISPLAY=:99
+            export GDK_BACKEND=x11
+            Xvfb :99 -screen 0 1024x768x24 &
+          else
+            export DISPLAY=:0
+            export GDK_BACKEND=wayland
+            export WAYLAND_DISPLAY=wayland-0
+            export WLR_BACKENDS=headless
+            export XDG_RUNTIME_DIR=/tmp/runtime-dir
+            mkdir -p $XDG_RUNTIME_DIR
+            chmod 700 $XDG_RUNTIME_DIR
+          fi
+
+          # Wait for display to be ready
+          sleep 3
 
       - name: Run Environment-specific Tests
         run: |
-          # Setup virtual display
+          # Start GNOME Shell in test mode
           if [ "${{ matrix.display-server }}" = "x11" ]; then
-            export DISPLAY=:99
-            Xvfb :99 &
+            gnome-shell --replace --x11 --unsafe-mode &
           else
-            export WLR_BACKENDS=headless
+            gnome-shell --replace --wayland --unsafe-mode &
           fi
           
-          # Run version-specific tests
-          gjs-unit tests/environment/${{ matrix.display-server }}/gnome${{ matrix.gnome-version }}/**/*.js
+          # Wait for GNOME Shell to start
+          sleep 5
+          
+          # Run tests with proper environment
+          gjs \
+            -I /usr/share/gnome-shell \
+            -I . \
+            tests/environment/${{ matrix.display-server }}/gnome${{ matrix.gnome-version }}/**/*.js
+        env:
+          GSETTINGS_BACKEND: memory
+          SHELL: /bin/bash
+
+      - name: Collect Test Logs
+        if: always()
+        run: |
+          mkdir -p logs
+          journalctl -b > logs/journal.log
+          if [ -f ~/.cache/gnome-shell/errors.log ]; then
+            cp ~/.cache/gnome-shell/errors.log logs/gnome-shell-errors.log
+          fi
+
+      - name: Upload Test Logs
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-logs-${{ matrix.gnome-version }}-${{ matrix.display-server }}
+          path: logs/
 
   version-bump:
     needs: [validate, test-environments]

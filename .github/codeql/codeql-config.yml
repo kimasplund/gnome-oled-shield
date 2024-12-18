@@ -1,0 +1,46 @@
+name: "OLED Care CodeQL config"
+
+disable-default-queries: true
+
+queries:
+  - uses: security-extended
+  - uses: security-and-quality
+  - uses: ./custom-queries/*.ql
+
+query-filters:
+  - exclude:
+      problem.severity:
+        - note
+        - warning
+
+paths:
+  - extension.js
+  - prefs.js
+paths-ignore:
+  - '**/tests/**'
+  - '**/dist/**'
+  - '**/build/**'
+  - '**/*.test.js'
+  - '**/*.spec.js'
+
+extraction:
+  javascript:
+    index-javascript-source-files: true
+    index-typescript-source-files: false
+    typescript-use-tsc: false
+    typescript-use-type-information: false
+    index-source-files-only: true
+    resolve-package-lock: true
+    include-node-modules: false
+
+packs:
+  # Include the latest JavaScript security pack
+  javascript:
+    - scope: security-extended
+    - scope: security-and-quality
+    - scope: audit
+
+database:
+  analyze-builtin-libraries: false
+  max-tuples: 1000000
+  log-level: warning 
