@@ -1,0 +1,216 @@
+name: GNOME 47 CI
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - '**.js'
+      - 'metadata.json'
+      - '.github/workflows/gnome47.yml'
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - '**.js'
+      - 'metadata.json'
+      - '.github/workflows/gnome47.yml'
+
+jobs:
+  test-gnome47:
+    name: Test GNOME 47
+    strategy:
+      matrix:
+        display-server: ['x11', 'wayland']
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/gnome/gnome-nightly:main
+      options: --privileged
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Test Environment
+        run: |
+          # Update package lists
+          dnf update -y
+          
+          # Install required packages
+          dnf install -y \
+            gjs \
+            gnome-shell \
+            ${{ matrix.display-server == 'x11' && 'xorg-x11-server-Xvfb' || 'wayland-protocols' }} \
+            mesa-dri-drivers \
+            dbus-x11 \
+            which \
+            procps \
+            git \
+            nodejs \
+            npm
+
+          # Setup DBus
+          mkdir -p /run/dbus
+          dbus-daemon --system --fork
+          
+          # Setup environment variables
+          if [ "${{ matrix.display-server }}" = "x11" ]; then
+            export DISPLAY=:99
+            export GDK_BACKEND=x11
+            Xvfb :99 -screen 0 1024x768x24 &
+          else
+            export DISPLAY=:0
+            export GDK_BACKEND=wayland
+            export WAYLAND_DISPLAY=wayland-0
+            export WLR_BACKENDS=headless
+            export XDG_RUNTIME_DIR=/tmp/runtime-dir
+            mkdir -p $XDG_RUNTIME_DIR
+            chmod 700 $XDG_RUNTIME_DIR
+          fi
+
+          # Wait for display to be ready
+          sleep 3
+
+      - name: Install Test Dependencies
+        run: |
+          npm init -y
+          npm install -D mocha chai sinon gjs-unit nyc
+
+      - name: Run Tests
+        run: |
+          # Start GNOME Shell in test mode
+          if [ "${{ matrix.display-server }}" = "x11" ]; then
+            gnome-shell --replace --x11 --unsafe-mode &
+          else
+            gnome-shell --replace --wayland --unsafe-mode &
+          fi
+          
+          # Wait for GNOME Shell to start
+          sleep 5
+          
+          # Run tests with coverage
+          nyc --reporter=lcov --reporter=text-summary \
+            gjs \
+              -I /usr/share/gnome-shell \
+              -I . \
+              tests/environment/${{ matrix.display-server }}/gnome47/**/*.js
+        env:
+          GSETTINGS_BACKEND: memory
+          SHELL: /bin/bash
+
+      - name: Upload Coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage/lcov.info
+          flags: gnome47-${{ matrix.display-server }}
+
+      - name: Collect Test Logs
+        if: always()
+        run: |
+          mkdir -p logs
+          journalctl -b > logs/journal.log
+          if [ -f ~/.cache/gnome-shell/errors.log ]; then
+            cp ~/.cache/gnome-shell/errors.log logs/gnome-shell-errors.log
+          fi
+
+      - name: Upload Test Logs
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-logs-gnome47-${{ matrix.display-server }}
+          path: logs/
+
+  validate-gnome47:
+    name: Validate GNOME 47
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/gnome/gnome-nightly:main
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Dependencies
+        run: |
+          dnf update -y
+          dnf install -y \
+            gjs \
+            gnome-shell \
+            jq \
+            libxml2-utils \
+            nodejs \
+            npm
+          npm install -g eslint
+
+      - name: Validate JSON
+        run: |
+          jq '.' metadata.json > /dev/null
+          for schema in schemas/*.xml; do
+            xmllint --noout "$schema"
+          done
+
+      - name: Validate GNOME Version Support
+        run: |
+          if ! jq -e '.["shell-version"] | contains(["47"])' metadata.json > /dev/null; then
+            echo "Error: metadata.json does not support GNOME 47"
+            exit 1
+          fi
+
+      - name: Run ESLint
+        run: eslint extension.js prefs.js
+
+      - name: Check Portal API Usage
+        run: |
+          if ! grep -q "Shell.Screenshot.getPortalProxy()" extension.js; then
+            echo "Warning: Portal API usage not detected for GNOME 47"
+            exit 1
+          fi
+
+  build-gnome47:
+    name: Build GNOME 47
+    needs: [test-gnome47, validate-gnome47]
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/gnome/gnome-nightly:main
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          dnf update -y
+          dnf install -y \
+            zip \
+            jq \
+            gjs \
+            gnome-shell
+
+      - name: Get Version
+        id: get_version
+        run: echo "version=$(jq -r '.version' metadata.json)" >> $GITHUB_OUTPUT
+
+      - name: Build Extension
+        run: |
+          mkdir -p build/schemas
+          glib-compile-schemas --strict --targetdir=build/schemas/ schemas/
+          cp -r \
+            extension.js \
+            prefs.js \
+            metadata.json \
+            README.md \
+            LICENSE \
+            build/
+          cp -r schemas/*.xml build/schemas/
+
+      - name: Create Package
+        run: |
+          cd build
+          zip -r ../oled-care-gnome47-v${{ steps.get_version.outputs.version }}.zip \
+            extension.js \
+            prefs.js \
+            metadata.json \
+            schemas/ \
+            README.md \
+            LICENSE
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: oled-care-gnome47-v${{ steps.get_version.outputs.version }}
+          path: oled-care-gnome47-v${{ steps.get_version.outputs.version }}.zip 
