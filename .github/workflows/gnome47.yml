@@ -20,17 +20,23 @@ jobs:
     strategy:
       matrix:
         display-server: ['x11', 'wayland']
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     container:
-      # Using Fedora 40 as base for GNOME 47 testing
-      image: fedora:40
-      options: --privileged
+      image: fedora:rawhide
+      options: >-
+        --privileged
+        -v /sys/fs/cgroup:/sys/fs/cgroup:rw
+        --cgroupns=host
     
     steps:
       - uses: actions/checkout@v4
       
       - name: Setup Test Environment
         run: |
+          # System info
+          cat /etc/os-release
+          uname -a
+          
           # Enable GNOME nightly repositories
           dnf install -y dnf-plugins-core
           dnf copr enable -y gnome/gnome-nightly
@@ -39,6 +45,7 @@ jobs:
           dnf update -y
           
           # Install GNOME 47 packages
+          dnf group install -y "GNOME Desktop"
           dnf install -y \
             gjs \
             gnome-shell \
@@ -52,7 +59,15 @@ jobs:
             npm \
             mutter \
             gnome-settings-daemon \
-            gnome-session
+            gnome-session \
+            systemd \
+            dbus \
+            dbus-daemon \
+            dbus-tools \
+            dbus-x11
+
+          # Setup systemd
+          systemctl start dbus
 
           # Setup DBus
           mkdir -p /run/dbus
@@ -73,6 +88,12 @@ jobs:
             chmod 700 $XDG_RUNTIME_DIR
           fi
 
+          # Debug info
+          echo "Display server: ${{ matrix.display-server }}"
+          echo "DISPLAY: $DISPLAY"
+          echo "GDK_BACKEND: $GDK_BACKEND"
+          echo "DBUS_SESSION_BUS_ADDRESS: $DBUS_SESSION_BUS_ADDRESS"
+          
           # Wait for display to be ready
           sleep 3
 
@@ -83,18 +104,19 @@ jobs:
 
       - name: Run Tests
         run: |
-          # Start GNOME Shell in test mode
+          # Start GNOME Shell with debug output
           if [ "${{ matrix.display-server }}" = "x11" ]; then
-            gnome-shell --replace --x11 --unsafe-mode &
+            SHELL_DEBUG=all gnome-shell --replace --x11 --unsafe-mode &
           else
-            gnome-shell --replace --wayland --unsafe-mode &
+            SHELL_DEBUG=all gnome-shell --replace --wayland --unsafe-mode &
           fi
           
-          # Wait for GNOME Shell to start
+          # Wait for GNOME Shell to start and show debug info
           sleep 5
+          ps aux | grep gnome-shell
           
           # Run tests with coverage
-          nyc --reporter=lcov --reporter=text-summary \
+          SHELL_DEBUG=all nyc --reporter=lcov --reporter=text-summary \
             gjs \
               -I /usr/share/gnome-shell \
               -I . \
@@ -103,6 +125,8 @@ jobs:
           GSETTINGS_BACKEND: memory
           SHELL: /bin/bash
           XDG_SESSION_TYPE: ${{ matrix.display-server }}
+          MUTTER_DEBUG: 1
+          G_MESSAGES_DEBUG: all
 
       - name: Upload Coverage
         uses: codecov/codecov-action@v3
@@ -118,6 +142,12 @@ jobs:
           if [ -f ~/.cache/gnome-shell/errors.log ]; then
             cp ~/.cache/gnome-shell/errors.log logs/gnome-shell-errors.log
           fi
+          # Collect additional debug info
+          dbus-monitor > logs/dbus.log &
+          sleep 2
+          pkill dbus-monitor
+          ps aux > logs/processes.log
+          env > logs/environment.log
 
       - name: Upload Test Logs
         if: always()
@@ -128,9 +158,9 @@ jobs:
 
   validate-gnome47:
     name: Validate GNOME 47
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     container:
-      image: fedora:40
+      image: fedora:rawhide
     
     steps:
       - uses: actions/checkout@v4
@@ -179,9 +209,9 @@ jobs:
   build-gnome47:
     name: Build GNOME 47
     needs: [test-gnome47, validate-gnome47]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     container:
-      image: fedora:40
+      image: fedora:rawhide
     
     steps:
       - uses: actions/checkout@v4
