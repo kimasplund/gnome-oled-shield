@@ -113,5 +113,10 @@
             <summary>Pixel Refresh Time Remaining</summary>
             <description>Estimated time remaining for current pixel refresh (in seconds)</description>
         </key>
+        <key name="debug-mode" type="b">
+            <default>false</default>
+            <summary>Debug Mode</summary>
+            <description>Enable detailed logging for debugging purposes</description>
+        </key>
     </schema>
 </schemalist> 

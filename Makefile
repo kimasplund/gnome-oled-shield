@@ -37,6 +37,7 @@ build-files: $(BUILD_DIR)
 		prefs.js \
 		metadata.json \
 		README.md \
+		lib \
 		$(BUILD_DIR)/
 	@if [ -f LICENSE ]; then \
 		cp LICENSE $(BUILD_DIR)/; \
@@ -58,6 +59,7 @@ package: build $(DIST_DIR)
 		prefs.js \
 		metadata.json \
 		schemas/ \
+		lib/ \
 		README.md \
 		$(if $(wildcard LICENSE),LICENSE,)
 
