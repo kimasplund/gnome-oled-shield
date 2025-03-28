@@ -61,13 +61,18 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
           check-latest: true
 
       - name: Install dependencies
-        run: |
-          npm ci
-          npm install -D eslint nyc mocha chai sinon gjs-unit
+        run: npm install
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
 
       - name: Run validation checks
         run: |
@@ -107,11 +112,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
           check-latest: true
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Run CodeQL Analysis
         uses: github/codeql-action/init@v3
@@ -223,7 +227,12 @@ jobs:
           check-latest: true
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          if [ ! -f package-lock.json ]; then
+            npm install
+          else
+            npm ci
+          fi
 
       - name: Build and Package
         run: |
