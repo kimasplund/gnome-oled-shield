@@ -12,7 +12,7 @@ function _log(message) {
 }
 
 // GObject imports
-const { GObject, St, GLib } = imports.gi;
+const { GObject, St, GLib, Gio } = imports.gi;
 
 // GNOME Shell imports
 const Main = imports.ui.main;
@@ -33,6 +33,7 @@ class OledCareIndicator extends PanelMenu.Button {
 
         this._settings = ExtensionUtils.getSettings();
         this._sessionMode = Main.sessionMode;
+        this._menuItems = {};  // Initialize menu items container early
         
         // Validate settings
         this._validateSettings();
@@ -57,16 +58,26 @@ class OledCareIndicator extends PanelMenu.Button {
         });
         this.add_child(icon);
 
-        this._buildMenu();
-        this._bindSettings();
+        try {
+            this._buildMenu();
+            this._bindSettings();
+        } catch (error) {
+            this._log(`Error building menu: ${error.message}`);
+            this._showNotification('Error', 'Failed to build extension menu');
+        }
 
         // Initialize features
         this._log('Initializing features...');
-        this._displayManager.init();
-        this._pixelShift.init();
-        this._dimming.init();
-        this._pixelRefresh.init();
-        this._log('Features initialized');
+        try {
+            this._displayManager.init();
+            this._pixelShift.init();
+            this._dimming.init();
+            this._pixelRefresh.init();
+            this._log('Features initialized');
+        } catch (error) {
+            this._log(`Error initializing features: ${error.message}`);
+            this._showNotification('Error', 'Failed to initialize some features');
+        }
 
         // Connect to session mode changes
         this._sessionModeChangedId = this._sessionMode.connect('updated', 
@@ -84,8 +95,7 @@ class OledCareIndicator extends PanelMenu.Button {
         const requiredSettings = [
             'debug-mode',
             'enabled-displays',
-            'display-brightness',
-            'display-contrast',
+            'screen-dim-enabled',
             'dimming-level',
             'screen-dim-timeout',
             'unfocus-dim-enabled',
@@ -157,6 +167,166 @@ class OledCareIndicator extends PanelMenu.Button {
         this._pixelShift.disable();
         this._dimming.disable();
         this._pixelRefresh.disable();
+    }
+
+    _buildMenu() {
+        this._log('Building menu');
+        
+        // Header
+        let headerItem = new PopupMenu.PopupMenuItem('OLED Care', { 
+            reactive: false,
+            style_class: 'popup-menu-header oled-care-header'
+        });
+        this.menu.addMenuItem(headerItem);
+        
+        // Separator
+        this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        
+        // Display selection
+        const displayItem = new PopupMenu.PopupMenuItem('Select Displays');
+        displayItem.connect('activate', () => {
+            try {
+                this._displayManager.showDisplaySelector();
+            } catch (error) {
+                this._logError('Failed to show display selector: ' + error.message);
+                this._showNotification('Failed to show display selector', 'error');
+            }
+        });
+        this.menu.addMenuItem(displayItem);
+        
+        // Separator
+        this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        
+        // Pixel Shift toggle
+        this._menuItems.pixelShift = new PopupMenu.PopupSwitchMenuItem('Pixel Shift');
+        this._menuItems.pixelShift.setToggleState(this._settings.get_boolean('pixel-shift-enabled'));
+        this._menuItems.pixelShift.connect('toggled', (item) => {
+            this._settings.set_boolean('pixel-shift-enabled', item.state);
+        });
+        this.menu.addMenuItem(this._menuItems.pixelShift);
+        
+        // Screen Dimming toggle
+        this._menuItems.screenDim = new PopupMenu.PopupSwitchMenuItem('Screen Dimming');
+        this._menuItems.screenDim.setToggleState(this._settings.get_boolean('screen-dim-enabled'));
+        this._menuItems.screenDim.connect('toggled', (item) => {
+            this._settings.set_boolean('screen-dim-enabled', item.state);
+        });
+        this.menu.addMenuItem(this._menuItems.screenDim);
+        
+        // Window Dimming toggle
+        this._menuItems.windowDim = new PopupMenu.PopupSwitchMenuItem('Window Dimming');
+        this._menuItems.windowDim.setToggleState(this._settings.get_boolean('unfocus-dim-enabled'));
+        this._menuItems.windowDim.connect('toggled', (item) => {
+            this._settings.set_boolean('unfocus-dim-enabled', item.state);
+        });
+        this.menu.addMenuItem(this._menuItems.windowDim);
+        
+        // Pixel Refresh toggle
+        this._menuItems.pixelRefresh = new PopupMenu.PopupSwitchMenuItem('Pixel Refresh');
+        this._menuItems.pixelRefresh.setToggleState(this._settings.get_boolean('pixel-refresh-enabled'));
+        this._menuItems.pixelRefresh.connect('toggled', (item) => {
+            this._settings.set_boolean('pixel-refresh-enabled', item.state);
+        });
+        this.menu.addMenuItem(this._menuItems.pixelRefresh);
+        
+        // Manual Pixel Refresh
+        this._menuItems.manualRefresh = new PopupMenu.PopupMenuItem('Run Pixel Refresh Now');
+        this._menuItems.manualRefresh.setSensitive(!this._settings.get_boolean('pixel-refresh-running'));
+        this._menuItems.manualRefresh.connect('activate', () => {
+            this._pixelRefresh.runManualRefresh();
+        });
+        this.menu.addMenuItem(this._menuItems.manualRefresh);
+        
+        // Separator
+        this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        
+        // Settings button
+        let settingsItem = new PopupMenu.PopupMenuItem('Settings');
+        settingsItem.connect('activate', () => {
+            ExtensionUtils.openPrefs();
+        });
+        this.menu.addMenuItem(settingsItem);
+        
+        this._log('Menu built');
+    }
+    
+    _bindSettings() {
+        this._log('Binding settings');
+        
+        // Bind pixel shift settings
+        this._settings.bind('pixel-shift-enabled', this._pixelShift, 'enabled', Gio.SettingsBindFlags.DEFAULT);
+        this._settings.connect('changed::pixel-shift-enabled', () => {
+            if (this._menuItems.pixelShift) {
+                this._menuItems.pixelShift.setToggleState(this._settings.get_boolean('pixel-shift-enabled'));
+            }
+        });
+        
+        // Bind dimming settings
+        this._settings.bind('screen-dim-enabled', this._dimming, 'enabled', Gio.SettingsBindFlags.DEFAULT);
+        this._settings.connect('changed::screen-dim-enabled', () => {
+            if (this._menuItems.screenDim) {
+                this._menuItems.screenDim.setToggleState(this._settings.get_boolean('screen-dim-enabled'));
+            }
+        });
+        
+        this._settings.bind('unfocus-dim-enabled', this._dimming, 'unfocusEnabled', Gio.SettingsBindFlags.DEFAULT);
+        this._settings.connect('changed::unfocus-dim-enabled', () => {
+            if (this._menuItems.windowDim) {
+                this._menuItems.windowDim.setToggleState(this._settings.get_boolean('unfocus-dim-enabled'));
+            }
+        });
+        
+        // Bind pixel refresh settings
+        this._settings.bind('pixel-refresh-enabled', this._pixelRefresh, 'enabled', Gio.SettingsBindFlags.DEFAULT);
+        this._settings.connect('changed::pixel-refresh-enabled', () => {
+            if (this._menuItems.pixelRefresh) {
+                this._menuItems.pixelRefresh.setToggleState(this._settings.get_boolean('pixel-refresh-enabled'));
+            }
+        });
+        
+        // Update manual refresh item sensitivity based on pixel refresh running state
+        this._settings.connect('changed::pixel-refresh-running', () => {
+            if (this._menuItems.manualRefresh) {
+                this._menuItems.manualRefresh.setSensitive(!this._settings.get_boolean('pixel-refresh-running'));
+            }
+        });
+        
+        // Bind other settings as before...
+        this._settings.bind('pixel-shift-interval', this._pixelShift, 'interval', Gio.SettingsBindFlags.DEFAULT);
+        this._settings.bind('dimming-level', this._dimming, 'level', Gio.SettingsBindFlags.DEFAULT);
+        this._settings.bind('screen-dim-timeout', this._dimming, 'timeout', Gio.SettingsBindFlags.DEFAULT);
+        this._settings.bind('unfocus-dim-level', this._dimming, 'unfocusLevel', Gio.SettingsBindFlags.DEFAULT);
+        this._settings.bind('pixel-refresh-speed', this._pixelRefresh, 'speed', Gio.SettingsBindFlags.DEFAULT);
+        this._settings.bind('pixel-refresh-smart', this._pixelRefresh, 'smart', Gio.SettingsBindFlags.DEFAULT);
+        this._settings.bind('pixel-refresh-schedule', this._pixelRefresh, 'schedule', Gio.SettingsBindFlags.DEFAULT);
+        this._settings.bind('enabled-displays', this._displayManager, 'enabledDisplays', Gio.SettingsBindFlags.DEFAULT);
+        
+        this._log('Settings bound');
+    }
+    
+    _showNotification(title, message) {
+        try {
+            if (!this._notificationSource || !Main.messageTray) {
+                this._log('Warning: Notification system not available');
+                return;
+            }
+            
+            let notification = new MessageTray.Notification({
+                source: this._notificationSource,
+                title: title,
+                body: message,
+                isTransient: true
+            });
+
+            try {
+                this._notificationSource.showNotification(notification);
+                this._log(`Notification shown: ${title} - ${message}`);
+            } catch (showError) {
+                this._log(`Failed to show notification: ${showError.message}`);
+            }
+        } catch (error) {
+            this._log(`Error creating notification: ${error.message}`);
+        }
     }
 
     destroy() {

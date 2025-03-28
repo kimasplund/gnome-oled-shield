@@ -2,8 +2,8 @@
 
 // Initialize system libraries first
 const { GLib } = imports.gi;
-const Main = imports.ui.main;
 const ExtensionUtils = imports.misc.extensionUtils;
+const Me = ExtensionUtils.getCurrentExtension();
 
 // Initialize logging
 function _log(message) {
@@ -17,19 +17,15 @@ function _logError(error) {
     }
 }
 
-// Get extension after logging is set up
-const Me = ExtensionUtils.getCurrentExtension();
-
 // Import extension modules
-let OledCareIndicator;
-try {
-    ({ OledCareIndicator } = Me.imports.lib.indicator);
-    _log('Successfully imported OledCareIndicator');
-} catch (error) {
-    _logError(error);
+let OledCareIndicator = null;
+
+function init() {
+    ExtensionUtils.initTranslations();
+    return new Extension();
 }
 
-var Extension = class Extension {
+class Extension {
     constructor() {
         _log('Constructing extension');
         this._indicator = null;
@@ -38,6 +34,19 @@ var Extension = class Extension {
     enable() {
         _log('Enabling extension');
         try {
+            const Main = imports.ui.main;
+            
+            // Import indicator the first time 
+            if (!OledCareIndicator) {
+                try {
+                    ({ OledCareIndicator } = Me.imports.lib.indicator);
+                    _log('Successfully imported OledCareIndicator');
+                } catch (error) {
+                    _logError(error);
+                    return;
+                }
+            }
+            
             // Only create indicator if we're in an allowed session mode
             if (Main.sessionMode.allowExtensions) {
                 _log('Session mode allows extensions');
@@ -64,4 +73,4 @@ var Extension = class Extension {
             _logError(error);
         }
     }
-}; 
+} 

@@ -1,4 +1,187 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" height="16px" viewBox="0 0 16 16" width="16px">
-    <path d="M 2 2 L 2 14 L 14 14 L 14 2 Z M 3 3 L 13 3 L 13 13 L 3 13 Z M 4 4 L 4 12 L 12 12 L 12 4 Z M 5 5 L 11 5 L 11 11 L 5 11 Z" style="fill:#2e3436"/>
-</svg> 
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 400 400">
+  <!-- Black background -->
+  <rect width="400" height="400" fill="#000000" />
+  
+  <!-- Colorful flowing circular ribbons -->
+  <defs>
+    <!-- Create radial and circular gradients -->
+    <radialGradient id="centerGlow" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+      <stop offset="0%" stop-color="#111111" />
+      <stop offset="100%" stop-color="#000000" />
+    </radialGradient>
+    
+    <!-- Filters for glow effects -->
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="4.5" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    
+    <!-- Gradient definitions for each color band -->
+    <linearGradient id="redGradient" gradientTransform="rotate(0)">
+      <stop offset="0%" stop-color="#FF0000" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#FF3366" stop-opacity="0.9" />
+    </linearGradient>
+    
+    <linearGradient id="orangeGradient" gradientTransform="rotate(15)">
+      <stop offset="0%" stop-color="#FF6600" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#FFCC00" stop-opacity="0.9" />
+    </linearGradient>
+    
+    <linearGradient id="yellowGradient" gradientTransform="rotate(30)">
+      <stop offset="0%" stop-color="#FFCC00" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#CCFF00" stop-opacity="0.9" />
+    </linearGradient>
+    
+    <linearGradient id="greenGradient" gradientTransform="rotate(45)">
+      <stop offset="0%" stop-color="#00CC00" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#00FFCC" stop-opacity="0.9" />
+    </linearGradient>
+    
+    <linearGradient id="cyanGradient" gradientTransform="rotate(60)">
+      <stop offset="0%" stop-color="#00CCFF" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#0066FF" stop-opacity="0.9" />
+    </linearGradient>
+    
+    <linearGradient id="blueGradient" gradientTransform="rotate(75)">
+      <stop offset="0%" stop-color="#0033FF" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#3300FF" stop-opacity="0.9" />
+    </linearGradient>
+    
+    <linearGradient id="purpleGradient" gradientTransform="rotate(90)">
+      <stop offset="0%" stop-color="#6600FF" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#CC00FF" stop-opacity="0.9" />
+    </linearGradient>
+    
+    <linearGradient id="pinkGradient" gradientTransform="rotate(105)">
+      <stop offset="0%" stop-color="#FF00CC" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#FF0066" stop-opacity="0.9" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Animations -->
+  <defs>
+    <!-- Animation for shifting center positions -->
+    <animateTransform id="redShift" attributeName="transform" type="translate" 
+                     from="10 -5" to="-10 5" dur="5s" repeatCount="indefinite" additive="sum" />
+    <animateTransform id="orangeShift" attributeName="transform" type="translate" 
+                     from="-5 10" to="5 -10" dur="6s" repeatCount="indefinite" additive="sum" />
+    <animateTransform id="yellowShift" attributeName="transform" type="translate" 
+                     from="-10 -10" to="10 10" dur="7s" repeatCount="indefinite" additive="sum" />
+    <animateTransform id="greenShift" attributeName="transform" type="translate" 
+                     from="5 -15" to="-5 15" dur="8s" repeatCount="indefinite" additive="sum" />
+    <animateTransform id="cyanShift" attributeName="transform" type="translate" 
+                     from="15 10" to="-15 -10" dur="9s" repeatCount="indefinite" additive="sum" />
+    <animateTransform id="blueShift" attributeName="transform" type="translate" 
+                     from="-10 5" to="10 -5" dur="7.5s" repeatCount="indefinite" additive="sum" />
+    <animateTransform id="purpleShift" attributeName="transform" type="translate" 
+                     from="5 -5" to="-5 5" dur="6.5s" repeatCount="indefinite" additive="sum" />
+    <animateTransform id="pinkShift" attributeName="transform" type="translate" 
+                     from="-15 0" to="15 0" dur="8.5s" repeatCount="indefinite" additive="sum" />
+                     
+    <!-- Animations for rotating ellipses -->
+    <animateTransform id="redRotate" attributeName="transform" type="rotate" 
+                     from="0 200 200" to="360 200 200" dur="25s" repeatCount="indefinite" additive="sum" />
+    <animateTransform id="orangeRotate" attributeName="transform" type="rotate" 
+                     from="30 200 200" to="390 200 200" dur="30s" repeatCount="indefinite" additive="sum" />
+    <animateTransform id="yellowRotate" attributeName="transform" type="rotate" 
+                     from="60 200 200" to="420 200 200" dur="35s" repeatCount="indefinite" additive="sum" />
+    <animateTransform id="greenRotate" attributeName="transform" type="rotate" 
+                     from="90 200 200" to="450 200 200" dur="28s" repeatCount="indefinite" additive="sum" />
+    <animateTransform id="cyanRotate" attributeName="transform" type="rotate" 
+                     from="120 200 200" to="480 200 200" dur="32s" repeatCount="indefinite" additive="sum" />
+    <animateTransform id="blueRotate" attributeName="transform" type="rotate" 
+                     from="150 200 200" to="510 200 200" dur="29s" repeatCount="indefinite" additive="sum" />
+    <animateTransform id="purpleRotate" attributeName="transform" type="rotate" 
+                     from="180 200 200" to="540 200 200" dur="31s" repeatCount="indefinite" additive="sum" />
+    <animateTransform id="pinkRotate" attributeName="transform" type="rotate" 
+                     from="210 200 200" to="570 200 200" dur="27s" repeatCount="indefinite" additive="sum" />
+                     
+    <!-- Animations for stretching ellipses -->
+    <animate id="redStretch" attributeName="ry" values="145;155;145" dur="8s" repeatCount="indefinite" />
+    <animate id="orangeStretch" attributeName="rx" values="155;165;155" dur="9s" repeatCount="indefinite" />
+    <animate id="yellowStretch" attributeName="ry" values="150;160;150" dur="7s" repeatCount="indefinite" />
+    <animate id="greenStretch" attributeName="rx" values="150;140;150" dur="10s" repeatCount="indefinite" />
+    <animate id="cyanStretch" attributeName="ry" values="145;135;145" dur="8.5s" repeatCount="indefinite" />
+    <animate id="blueStretch" attributeName="rx" values="145;155;145" dur="9.5s" repeatCount="indefinite" />
+    <animate id="purpleStretch" attributeName="ry" values="148;158;148" dur="7.5s" repeatCount="indefinite" />
+    <animate id="pinkStretch" attributeName="rx" values="152;142;152" dur="8.7s" repeatCount="indefinite" />
+  </defs>
+  
+  <!-- Center black circle -->
+  <circle cx="200" cy="200" r="90" fill="url(#centerGlow)" />
+  
+  <!-- Circular color bands with rotation and overlapping -->
+  <!-- Each ellipse is rotated and offset slightly to create flowing effect -->
+  
+  <!-- Red circular ribbon -->
+  <ellipse cx="220" cy="175" rx="150" ry="145" 
+           fill="none" stroke="url(#redGradient)" stroke-width="8" 
+           filter="url(#glow)">
+    <use xlink:href="#redShift" />
+    <use xlink:href="#redRotate" />
+    <use xlink:href="#redStretch" />
+  </ellipse>
+  
+  <!-- Orange circular ribbon -->
+  <ellipse cx="195" cy="205" rx="155" ry="140" 
+           fill="none" stroke="url(#orangeGradient)" stroke-width="8" 
+           filter="url(#glow)">
+    <use xlink:href="#orangeShift" />
+    <use xlink:href="#orangeRotate" />
+    <use xlink:href="#orangeStretch" />
+  </ellipse>
+  
+  <!-- Yellow circular ribbon -->
+  <ellipse cx="175" cy="175" rx="145" ry="150" 
+           fill="none" stroke="url(#yellowGradient)" stroke-width="8" 
+           filter="url(#glow)">
+    <use xlink:href="#yellowShift" />
+    <use xlink:href="#yellowRotate" />
+    <use xlink:href="#yellowStretch" />
+  </ellipse>
+  
+  <!-- Green circular ribbon -->
+  <ellipse cx="205" cy="185" rx="150" ry="145" 
+           fill="none" stroke="url(#greenGradient)" stroke-width="8" 
+           filter="url(#glow)">
+    <use xlink:href="#greenShift" />
+    <use xlink:href="#greenRotate" />
+    <use xlink:href="#greenStretch" />
+  </ellipse>
+  
+  <!-- Cyan circular ribbon -->
+  <ellipse cx="215" cy="210" rx="155" ry="145" 
+           fill="none" stroke="url(#cyanGradient)" stroke-width="8" 
+           filter="url(#glow)">
+    <use xlink:href="#cyanShift" />
+    <use xlink:href="#cyanRotate" />
+    <use xlink:href="#cyanStretch" />
+  </ellipse>
+  
+  <!-- Blue circular ribbon -->
+  <ellipse cx="200" cy="220" rx="145" ry="150" 
+           fill="none" stroke="url(#blueGradient)" stroke-width="8" 
+           filter="url(#glow)">
+    <use xlink:href="#blueShift" />
+    <use xlink:href="#blueRotate" />
+    <use xlink:href="#blueStretch" />
+  </ellipse>
+  
+  <!-- Purple circular ribbon -->
+  <ellipse cx="205" cy="195" rx="150" ry="148" 
+           fill="none" stroke="url(#purpleGradient)" stroke-width="8" 
+           filter="url(#glow)">
+    <use xlink:href="#purpleShift" />
+    <use xlink:href="#purpleRotate" />
+    <use xlink:href="#purpleStretch" />
+  </ellipse>
+  
+  <!-- Pink circular ribbon -->
+  <ellipse cx="185" cy="200" rx="152" ry="143" 
+           fill="none" stroke="url(#pinkGradient)" stroke-width="8" 
+           filter="url(#glow)">
+    <use xlink:href="#pinkShift" />
+    <use xlink:href="#pinkRotate" />
+    <use xlink:href="#pinkStretch" />
+  </ellipse>
+</svg>

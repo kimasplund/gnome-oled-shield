@@ -6,6 +6,23 @@
             <summary>Enabled Displays</summary>
             <description>List of display IDs where OLED protection is enabled</description>
         </key>
+        <key name="screen-dim-enabled" type="b">
+            <default>true</default>
+            <summary>Enable Screen Dimming</summary>
+            <description>Enable automatic screen dimming when idle</description>
+        </key>
+        <key name="display-brightness" type="i">
+            <default>100</default>
+            <range min="10" max="100"/>
+            <summary>Display Brightness</summary>
+            <description>Brightness level for OLED displays (10-100)</description>
+        </key>
+        <key name="display-contrast" type="i">
+            <default>100</default>
+            <range min="50" max="150"/>
+            <summary>Display Contrast</summary>
+            <description>Contrast level for OLED displays (50-150)</description>
+        </key>
         <key name="dimming-level" type="i">
             <default>20</default>
             <range min="0" max="50"/>
@@ -110,13 +127,24 @@
         </key>
         <key name="pixel-refresh-time-remaining" type="i">
             <default>0</default>
+            <range min="0" max="3600"/>
             <summary>Pixel Refresh Time Remaining</summary>
-            <description>Estimated time remaining for current pixel refresh (in seconds)</description>
+            <description>Estimated time remaining for current pixel refresh (in seconds, 0-3600)</description>
         </key>
         <key name="debug-mode" type="b">
             <default>false</default>
             <summary>Debug Mode</summary>
             <description>Enable detailed logging for debugging purposes</description>
+        </key>
+        <key name="pixel-refresh-interrupted" type="b">
+            <default>false</default>
+            <summary>Pixel Refresh Interrupted</summary>
+            <description>Indicates if a pixel refresh was interrupted by system suspend</description>
+        </key>
+        <key name="pixel-refresh-interrupted-progress" type="i">
+            <default>0</default>
+            <summary>Interrupted Refresh Progress</summary>
+            <description>Progress of the interrupted pixel refresh (0-100)</description>
         </key>
     </schema>
 </schemalist> 
