@@ -57,22 +57,28 @@ jobs:
             gir1.2-gtk-4.0 \
             gir1.2-glib-2.0
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          check-latest: true
+      - name: Create package.json
+        run: |
+          cat > package.json << 'EOF'
+          {
+            "name": "gnome-oled-shield",
+            "version": "1.0.0",
+            "private": true,
+            "devDependencies": {
+              "eslint": "^8.57.0",
+              "nyc": "^15.1.0",
+              "mocha": "^10.3.0"
+            },
+            "scripts": {
+              "lint": "eslint extension.js prefs.js",
+              "test": "mocha tests/**/*.test.js",
+              "test:coverage": "nyc --reporter=lcov --reporter=text-summary mocha tests/**/*.test.js"
+            }
+          }
+          EOF
 
       - name: Install dependencies
         run: npm install
-
-      - name: Cache dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
 
       - name: Run validation checks
         run: |
@@ -87,10 +93,10 @@ jobs:
           glib-compile-schemas --strict --targetdir=build/schemas/ schemas/
 
           # Run ESLint
-          eslint extension.js prefs.js
+          npm run lint
 
           # Run Tests with Coverage
-          nyc --reporter=lcov --reporter=text-summary mocha tests/**/*.test.js
+          npm run test:coverage
 
       - name: Upload coverage
         uses: codecov/codecov-action@v3
@@ -158,7 +164,9 @@ jobs:
             dbus-x11 \
             which \
             procps \
-            git
+            git \
+            nodejs \
+            npm
 
           mkdir -p /run/dbus
           dbus-daemon --system --fork
@@ -211,20 +219,38 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          check-latest: true
+      - name: Install Dependencies
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y \
+            build-essential \
+            pkg-config \
+            libgtk-4-dev \
+            libglib2.0-dev \
+            libgirepository1.0-dev \
+            gir1.2-gtk-4.0 \
+            gir1.2-glib-2.0 \
+            nodejs \
+            npm
+
+      - name: Create package.json
+        run: |
+          cat > package.json << 'EOF'
+          {
+            "name": "gnome-oled-shield",
+            "version": "1.0.0",
+            "private": true,
+            "devDependencies": {
+              "eslint": "^8.57.0",
+              "nyc": "^15.1.0",
+              "mocha": "^10.3.0"
+            }
+          }
+          EOF
 
       - name: Install dependencies
-        run: |
-          if [ ! -f package-lock.json ]; then
-            npm install
-          else
-            npm ci
-          fi
+        run: npm install
 
       - name: Build and Package
         run: |
