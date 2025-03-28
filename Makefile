@@ -5,12 +5,9 @@ BUILD_DIR = build
 DIST_DIR = dist
 VERSION := $(shell jq -r '.version' metadata.json)
 
-.PHONY: all clean install uninstall package lint test install-dev uninstall-dev restart-shell watch help dev-setup validate-json compile-schemas build-files build
+.PHONY: all clean install uninstall package lint test install-dev uninstall-dev restart-shell watch help dev-setup validate-json build
 
 all: package
-
-$(BUILD_DIR):
-	mkdir -p $(BUILD_DIR)
 
 $(DIST_DIR):
 	mkdir -p $(DIST_DIR)
@@ -23,14 +20,13 @@ validate-json:
 		xmllint --noout "$$schema"; \
 	done
 
-# Compile schemas
-compile-schemas: $(BUILD_DIR)
+# Build target that depends on all build steps
+build: validate-json
+	@echo "Building extension..."
+	@mkdir -p $(BUILD_DIR)
 	@echo "Compiling schemas..."
 	@mkdir -p $(BUILD_DIR)/schemas
 	@glib-compile-schemas --strict --targetdir=$(BUILD_DIR)/schemas/ schemas/
-
-# Copy files to build directory
-build-files: $(BUILD_DIR)
 	@echo "Copying files..."
 	@cp -r \
 		extension.js \
@@ -46,9 +42,6 @@ build-files: $(BUILD_DIR)
 		cp -r icons $(BUILD_DIR)/; \
 	fi
 	@cp -r schemas/*.xml $(BUILD_DIR)/schemas/
-
-# Build target that depends on all build steps
-build: validate-json compile-schemas build-files
 
 # Create distributable package
 package: build $(DIST_DIR)

@@ -8,7 +8,7 @@
     "settings-schema": "org.gnome.shell.extensions.oled-care",
     "session-modes": ["user", "unlock-dialog"],
     "gettext-domain": "oled-care",
-    "development": false,
+    "development": true,
     "donations": {
         "github": "kimasplund"
     },
