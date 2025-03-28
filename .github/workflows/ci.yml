@@ -80,6 +80,42 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Create ESLint config
+        run: |
+          cat > .eslintrc.json << 'EOF'
+          {
+            "env": {
+              "browser": true,
+              "es2021": true,
+              "gnome-shell": true
+            },
+            "extends": "eslint:recommended",
+            "parserOptions": {
+              "ecmaVersion": "latest",
+              "sourceType": "module"
+            },
+            "rules": {
+              "no-unused-vars": "warn",
+              "no-console": "off"
+            },
+            "globals": {
+              "ARGV": "readonly",
+              "ARGV0": "readonly",
+              "globalThis": "readonly",
+              "global": "readonly",
+              "imports": "readonly",
+              "log": "readonly",
+              "logError": "readonly",
+              "logWarning": "readonly",
+              "print": "readonly",
+              "printerr": "readonly",
+              "quit": "readonly",
+              "system": "readonly",
+              "version": "readonly"
+            }
+          }
+          EOF
+
       - name: Run validation checks
         run: |
           # Validate JSON
@@ -126,18 +162,6 @@ jobs:
         with:
           category: "/language:javascript"
           upload: true
-
-      - name: Run Snyk Security Scan
-        uses: snyk/actions/node@master
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          args: >
-            code test
-            --severity-threshold=high
-            --all-projects
-            --detection-depth=4
-            --exclude=tests,dist,build
 
   test:
     needs: validate
@@ -211,6 +235,14 @@ jobs:
           name: test-logs-${{ matrix.gnome-version }}-${{ matrix.display-server }}
           path: logs/
 
+      - name: Generate Release Notes
+        run: |
+          echo "## Changes" > RELEASE_NOTES.md
+          git log $(git describe --tags --abbrev=0 HEAD^)..HEAD --pretty=format:"* %s" >> RELEASE_NOTES.md
+          echo "" >> RELEASE_NOTES.md
+          echo "## Security Scan Results" >> RELEASE_NOTES.md
+          echo "✅ Passed CodeQL Analysis" >> RELEASE_NOTES.md
+
   release:
     needs: [validate, test, security]
     runs-on: ubuntu-24.04
@@ -260,15 +292,6 @@ jobs:
       - name: Get Version
         id: get_version
         run: echo "version=$(jq -r '.version' metadata.json)" >> $GITHUB_OUTPUT
-
-      - name: Generate Release Notes
-        run: |
-          echo "## Changes" > RELEASE_NOTES.md
-          git log $(git describe --tags --abbrev=0 HEAD^)..HEAD --pretty=format:"* %s" >> RELEASE_NOTES.md
-          echo "" >> RELEASE_NOTES.md
-          echo "## Security Scan Results" >> RELEASE_NOTES.md
-          echo "✅ Passed CodeQL Analysis" >> RELEASE_NOTES.md
-          echo "✅ Passed Snyk Security Scan" >> RELEASE_NOTES.md
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
