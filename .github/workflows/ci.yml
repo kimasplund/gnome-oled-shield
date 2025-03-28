@@ -159,7 +159,7 @@ jobs:
     needs: validate
     strategy:
       matrix:
-        gnome-version: ['47', '46', '45']
+        gnome-version: ['48', '47', '46', '45']
         display-server: ['x11', 'wayland']
     runs-on: ubuntu-latest
     container:
