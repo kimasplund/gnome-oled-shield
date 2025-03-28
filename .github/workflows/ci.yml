@@ -37,8 +37,7 @@ jobs:
         with:
           languages: javascript
           config-file: .github/codeql/codeql-config.yml
-          setup-python-dependencies: false
-          tools: latest
+          tools: linked
           ram: 4096
           threads: 2
 
@@ -83,9 +82,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: |
-            package-lock.json
-            package.json
+          cache-dependency-path: package-lock.json
           check-latest: true
 
       - name: Install dependencies
@@ -163,6 +160,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
           cache-dependency-path: package-lock.json
+          check-latest: true
 
       - name: Install test dependencies
         run: |
