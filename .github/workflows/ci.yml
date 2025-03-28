@@ -127,6 +127,7 @@ jobs:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           args: >
+            code test
             --severity-threshold=high
             --all-projects
             --detection-depth=4
