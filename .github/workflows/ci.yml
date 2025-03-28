@@ -108,10 +108,11 @@ jobs:
           sarif_file: reports/dependency-check-report.sarif
 
       - name: Upload HTML report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: dependency-check-report
           path: reports/dependency-check-report.html
+          retention-days: 30
 
   validate:
     runs-on: ubuntu-24.04
