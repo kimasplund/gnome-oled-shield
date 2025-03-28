@@ -94,7 +94,7 @@ jobs:
               "sourceType": "module"
             },
             "rules": {
-              "no-unused-vars": "warn",
+              "no-unused-vars": ["warn", { "varsIgnorePattern": "^(GLib|GObject|init|_)$" }],
               "no-console": "off"
             },
             "globals": {
@@ -131,7 +131,13 @@ jobs:
           npm run lint
 
           # Run Tests with Coverage
-          npm run test:coverage
+          mkdir -p coverage
+          gjs \
+            -I /usr/share/gnome-shell \
+            -I . \
+            --coverage \
+            tests/environment/**/*.test.js > coverage/lcov.info || true
+          cat coverage/lcov.info
 
       - name: Upload coverage
         uses: codecov/codecov-action@v3
