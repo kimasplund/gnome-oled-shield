@@ -14,6 +14,17 @@ on:
       - 'metadata.json'
       - '.github/workflows/gnome48.yml'
 
+# Global environment variables
+env:
+  NODE_VERSION: '20'
+  UBUNTU_VERSION: '24.04'
+
+# Default permissions for all jobs
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
 jobs:
   test-gnome48:
     name: Test GNOME 48
@@ -102,9 +113,16 @@ jobs:
           # Wait for display to be ready
           sleep 3
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
       - name: Install Test Dependencies
         run: |
-          npm init -y
+          npm ci
           npm install -D mocha chai sinon gjs-unit nyc
 
       - name: Run Tests
@@ -138,6 +156,7 @@ jobs:
         with:
           files: ./coverage/lcov.info
           flags: gnome48-${{ matrix.display-server }}
+          fail_ci_if_error: true
 
       - name: Collect Test Logs
         if: always()
