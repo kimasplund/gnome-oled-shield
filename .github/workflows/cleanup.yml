@@ -14,11 +14,46 @@ jobs:
     name: Cleanup Old Workflow Runs
     runs-on: ubuntu-24.04
     steps:
-      - name: Delete old workflow runs
-        uses: c-hive/gha-remove-workflow-runs@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          retain_days: 30  # Keep runs for 30 days
-          keep_minimum_runs: 10  # Always keep at least 10 most recent runs
-          skip_workflows: "cleanup.yml"  # Don't delete runs from this workflow
-          dry_run: false  # Set to true to see what would be deleted without actually deleting 
+      - name: Install GitHub CLI
+        run: |
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+          sudo apt update
+          sudo apt install -y gh
+
+      - name: Cleanup old workflow runs
+        run: |
+          # Get all workflow runs older than 30 days
+          OLD_RUNS=$(gh api repos/${{ github.repository }}/actions/runs \
+            --paginate \
+            --jq '.workflow_runs[] | select(.created_at < (now - 30*24*60*60) | todateiso8601) | .id')
+          
+          # Delete each old run
+          for run_id in $OLD_RUNS; do
+            echo "Deleting workflow run $run_id"
+            gh api repos/${{ github.repository }}/actions/runs/$run_id \
+              -X DELETE \
+              --silent
+          done
+
+      - name: Cleanup old artifacts
+        run: |
+          # Get all artifacts older than 30 days
+          OLD_ARTIFACTS=$(gh api repos/${{ github.repository }}/actions/artifacts \
+            --paginate \
+            --jq '.artifacts[] | select(.created_at < (now - 30*24*60*60) | todateiso8601) | .id')
+          
+          # Delete each old artifact
+          for artifact_id in $OLD_ARTIFACTS; do
+            echo "Deleting artifact $artifact_id"
+            gh api repos/${{ github.repository }}/actions/artifacts/$artifact_id \
+              -X DELETE \
+              --silent
+          done
+
+      - name: Report cleanup results
+        run: |
+          echo "Cleanup completed successfully"
+          echo "Repository: ${{ github.repository }}"
+          echo "Run by: ${{ github.actor }}"
+          echo "Time: $(date -u)" 
