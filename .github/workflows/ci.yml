@@ -83,7 +83,10 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: package-lock.json
+          cache-dependency-path: |
+            package-lock.json
+            package.json
+          check-latest: true
 
       - name: Install dependencies
         run: |
@@ -117,24 +120,44 @@ jobs:
   validate:
     runs-on: ubuntu-24.04
     container:
-      image: ghcr.io/gtk-rs/gtk4-rs:latest
+      image: ubuntu:24.04
+      options: >-
+        --privileged
+        -v /sys/fs/cgroup:/sys/fs/cgroup:rw
+        --cgroupns=host
     
     steps:
       - uses: actions/checkout@v4
       
       - name: Install Dependencies
         run: |
+          # Configure apt for noninteractive
+          export DEBIAN_FRONTEND=noninteractive
+          
+          # Update package lists
           apt-get update
+          
+          # Install required packages
           apt-get install -y \
             gjs \
             gnome-shell \
             zip \
             jq \
             libxml2-utils \
-            npm
-          npm install -g eslint
+            nodejs \
+            npm \
+            git \
+            curl \
+            wget \
+            build-essential \
+            pkg-config \
+            libgtk-4-dev \
+            libglib2.0-dev \
+            libgirepository1.0-dev \
+            gir1.2-gtk-4.0 \
+            gir1.2-glib-2.0
 
-      - name: Setup Node.js for coverage
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -144,8 +167,8 @@ jobs:
       - name: Install test dependencies
         run: |
           npm ci
-          npm install -D nyc mocha chai sinon gjs-unit
-          
+          npm install -D eslint nyc mocha chai sinon gjs-unit
+
       - name: Validate JSON
         run: |
           jq '.' metadata.json > /dev/null
