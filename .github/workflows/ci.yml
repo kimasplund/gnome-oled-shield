@@ -36,7 +36,7 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           languages: javascript
-          config-file: .github/codeql/codeql-config.yml
+          queries: security-and-quality
           tools: linked
           ram: 4096
           threads: 2
@@ -82,10 +82,24 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: package-lock.json
+          cache-dependency-path: |
+            **/package-lock.json
+            **/package.json
           check-latest: true
 
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        id: npm-cache
+        with:
+          path: |
+            ~/.npm
+            node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
       - name: Install dependencies
+        if: steps.npm-cache.outputs.cache-hit != 'true'
         run: |
           npm ci
           npm install -D eslint
