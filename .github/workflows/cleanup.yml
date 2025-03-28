@@ -1,0 +1,24 @@
+name: Cleanup Workflow Runs
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'  # Run weekly on Sunday at midnight
+
+# Set permissions for the workflow
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cleanup:
+    name: Cleanup Old Workflow Runs
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Delete old workflow runs
+        uses: c-hive/gha-remove-workflow-runs@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          retain_days: 30  # Keep runs for 30 days
+          keep_minimum_runs: 10  # Always keep at least 10 most recent runs
+          skip_workflows: "cleanup.yml"  # Don't delete runs from this workflow
+          dry_run: false  # Set to true to see what would be deleted without actually deleting 
