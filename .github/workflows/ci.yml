@@ -22,115 +22,6 @@ permissions:
   actions: read
 
 jobs:
-  security-scan:
-    runs-on: ubuntu-24.04
-    permissions:
-      actions: read
-      contents: read
-      security-events: write
-    
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
-        with:
-          languages: javascript
-          queries: security-and-quality
-          tools: linked
-          ram: 4096
-          threads: 2
-
-      - name: Build CodeQL Database
-        uses: github/codeql-action/analyze@v3
-        with:
-          category: "/language:javascript"
-          upload: true
-          output: sarif-results
-          ram: 4096
-          threads: 2
-
-      - name: Upload SARIF results
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: sarif-results/javascript.sarif
-          category: "/language:javascript"
-          wait-for-processing: true
-
-      - name: Run Snyk Security Scan
-        uses: snyk/actions/node@master
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          args: >
-            --severity-threshold=high
-            --all-projects
-            --detection-depth=4
-            --exclude=tests,dist,build
-
-  dependency-check:
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      security-events: write
-      
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: package-lock.json
-          check-latest: true
-
-      - name: Ensure directories exist
-        run: |
-          mkdir -p node_modules
-          mkdir -p ~/.npm
-
-      - name: Cache dependencies
-        uses: actions/cache@v4
-        id: npm-cache
-        with:
-          path: |
-            ~/.npm
-            node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
-
-      - name: Install dependencies
-        if: steps.npm-cache.outputs.cache-hit != 'true'
-        run: |
-          npm ci
-          npm install -D eslint
-
-      - name: Check for vulnerable dependencies
-        uses: dependency-check/Dependency-Check_Action@main
-        with:
-          project: 'OLED-Care'
-          path: '.'
-          format: 'HTML,SARIF'
-          args: >
-            --suppression ./.dependency-check-suppression.xml
-            --failOnCVSS 7
-            --enableRetired
-            --exclude "tests/**" "dist/**" "build/**"
-
-      - name: Upload dependency check report
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: reports/dependency-check-report.sarif
-
-      - name: Upload HTML report
-        uses: actions/upload-artifact@v4
-        with:
-          name: dependency-check-report
-          path: reports/dependency-check-report.html
-          retention-days: 30
-
   validate:
     runs-on: ubuntu-24.04
     container:
@@ -145,13 +36,8 @@ jobs:
       
       - name: Install Dependencies
         run: |
-          # Configure apt for noninteractive
           export DEBIAN_FRONTEND=noninteractive
-          
-          # Update package lists
           apt-get update
-          
-          # Install required packages
           apt-get install -y \
             gjs \
             gnome-shell \
@@ -179,45 +65,87 @@ jobs:
           cache-dependency-path: package-lock.json
           check-latest: true
 
-      - name: Install test dependencies
+      - name: Install dependencies
         run: |
           npm ci
           npm install -D eslint nyc mocha chai sinon gjs-unit
 
-      - name: Validate JSON
+      - name: Run validation checks
         run: |
+          # Validate JSON
           jq '.' metadata.json > /dev/null
           for schema in schemas/*.xml; do
             xmllint --noout "$schema"
           done
 
-      - name: Compile Schemas
-        run: |
+          # Compile Schemas
           mkdir -p build/schemas
           glib-compile-schemas --strict --targetdir=build/schemas/ schemas/
 
-      - name: Run ESLint
-        run: eslint extension.js prefs.js
+          # Run ESLint
+          eslint extension.js prefs.js
 
-      - name: Run Tests with Coverage
-        run: |
+          # Run Tests with Coverage
           nyc --reporter=lcov --reporter=text-summary mocha tests/**/*.test.js
-          
-      - name: Upload coverage to Codecov
+
+      - name: Upload coverage
         uses: codecov/codecov-action@v3
         with:
           files: ./coverage/lcov.info
           fail_ci_if_error: true
 
-  test-environments:
+  security:
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run CodeQL Analysis
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript
+          queries: security-and-quality
+          tools: linked
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript"
+          upload: true
+
+      - name: Run Snyk Security Scan
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: >
+            --severity-threshold=high
+            --all-projects
+            --detection-depth=4
+            --exclude=tests,dist,build
+
+  test:
     needs: validate
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         gnome-version: ['48', '47', '46', '45']
         display-server: ['x11', 'wayland']
-    runs-on: ubuntu-24.04
     container:
-      # Use official GNOME image for better compatibility
       image: ghcr.io/gnome/gnome-runtime-images:${{ matrix.gnome-version }}
       options: --privileged
     
@@ -226,10 +154,7 @@ jobs:
       
       - name: Setup Test Environment
         run: |
-          # Update package lists
           dnf update -y
-          
-          # Install required packages
           dnf install -y \
             gjs \
             gnome-shell \
@@ -240,11 +165,9 @@ jobs:
             procps \
             git
 
-          # Setup DBus
           mkdir -p /run/dbus
           dbus-daemon --system --fork
           
-          # Setup environment variables
           if [ "${{ matrix.display-server }}" = "x11" ]; then
             export DISPLAY=:99
             export GDK_BACKEND=x11
@@ -258,23 +181,16 @@ jobs:
             mkdir -p $XDG_RUNTIME_DIR
             chmod 700 $XDG_RUNTIME_DIR
           fi
-
-          # Wait for display to be ready
           sleep 3
 
-      - name: Run Environment-specific Tests
+      - name: Run Tests
         run: |
-          # Start GNOME Shell in test mode
           if [ "${{ matrix.display-server }}" = "x11" ]; then
             gnome-shell --replace --x11 --unsafe-mode &
           else
             gnome-shell --replace --wayland --unsafe-mode &
           fi
-          
-          # Wait for GNOME Shell to start
           sleep 5
-          
-          # Run tests with proper environment
           gjs \
             -I /usr/share/gnome-shell \
             -I . \
@@ -285,22 +201,6 @@ jobs:
           MUTTER_DEBUG: 1
           G_MESSAGES_DEBUG: all
 
-      - name: Collect Test Logs
-        if: always()
-        run: |
-          mkdir -p logs
-          journalctl -b > logs/journal.log
-          if [ -f ~/.cache/gnome-shell/errors.log ]; then
-            cp ~/.cache/gnome-shell/errors.log logs/gnome-shell-errors.log
-          fi
-          # Collect additional debug info
-          dbus-monitor > logs/dbus.log &
-          sleep 2
-          pkill dbus-monitor
-          ps aux > logs/processes.log
-          env > logs/environment.log
-          gnome-shell --version > logs/gnome-version.log
-
       - name: Upload Test Logs
         if: always()
         uses: actions/upload-artifact@v3
@@ -308,10 +208,10 @@ jobs:
           name: test-logs-${{ matrix.gnome-version }}-${{ matrix.display-server }}
           path: logs/
 
-  version-bump:
-    needs: [validate, test-environments]
+  release:
+    needs: [validate, test, security]
     runs-on: ubuntu-24.04
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v')
     
     steps:
       - uses: actions/checkout@v4
@@ -326,74 +226,23 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            dist/*.zip
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build:
-    needs: [validate, test-environments]
-    runs-on: ubuntu-24.04
-    container:
-      image: ghcr.io/gtk-rs/gtk4-rs:latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Dependencies
+      - name: Build and Package
         run: |
-          apt-get update
-          apt-get install -y zip jq
+          make build
+          make package
 
       - name: Get Version
         id: get_version
         run: echo "version=$(jq -r '.version' metadata.json)" >> $GITHUB_OUTPUT
-
-      - name: Build Extension
-        run: make build
-
-      - name: Create Package
-        run: make package
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: oled-care-v${{ steps.get_version.outputs.version }}
-          path: dist/*.zip
-
-  release:
-    needs: build
-    runs-on: ubuntu-24.04
-    if: startsWith(github.ref, 'refs/tags/v')
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Get Version
-        id: get_version
-        run: echo "version=$(jq -r '.version' metadata.json)" >> $GITHUB_OUTPUT
-
-      - name: Download Artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: oled-care-v${{ steps.get_version.outputs.version }}
-          path: dist
 
       - name: Generate Release Notes
         run: |
           echo "## Changes" > RELEASE_NOTES.md
-          echo "" >> RELEASE_NOTES.md
           git log $(git describe --tags --abbrev=0 HEAD^)..HEAD --pretty=format:"* %s" >> RELEASE_NOTES.md
           echo "" >> RELEASE_NOTES.md
           echo "## Security Scan Results" >> RELEASE_NOTES.md
           echo "✅ Passed CodeQL Analysis" >> RELEASE_NOTES.md
-          echo "✅ Passed Dependency Check" >> RELEASE_NOTES.md
+          echo "✅ Passed Snyk Security Scan" >> RELEASE_NOTES.md
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -404,28 +253,3 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  publish-ego:
-    needs: build
-    runs-on: ubuntu-24.04
-    if: startsWith(github.ref, 'refs/tags/v')
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Get Version
-        id: get_version
-        run: echo "version=$(jq -r '.version' metadata.json)" >> $GITHUB_OUTPUT
-
-      - name: Download Artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: oled-care-v${{ steps.get_version.outputs.version }}
-          path: dist
-
-      - name: Publish to Extensions.GNOME.org
-        if: success()
-        run: |
-          echo "Note: Automated publishing to extensions.gnome.org requires additional setup"
-          echo "Please visit https://extensions.gnome.org/upload/ to manually upload the extension"
-          echo "Future automation can be implemented using their API when available"
