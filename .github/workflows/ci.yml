@@ -110,6 +110,12 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
           cache-dependency-path: package-lock.json
+          check-latest: true
+
+      - name: Ensure cache directory exists
+        run: |
+          mkdir -p ~/.npm
+          mkdir -p node_modules
 
       - name: Install dependencies
         run: npm ci
