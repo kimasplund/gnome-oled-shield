@@ -1,75 +1,70 @@
 'use strict';
 
-// GNOME imports
-const { GLib } = imports.gi;
-const Main = imports.ui.main;
-const ExtensionUtils = imports.misc.extensionUtils;
-const Me = ExtensionUtils.getCurrentExtension();
+import GObject from 'gi://GObject';
+import GLib from 'gi://GLib';
+import Gio from 'gi://Gio';
 
-// Initialize logging
-function _log(message) {
-    log(`[OLED Care] ${message}`);
-}
+// Import modules conditionally based on environment
+const isTestEnv = GLib.getenv('G_TEST_SRCDIR') !== null;
 
-function _logError(error) {
-    log(`[OLED Care] ERROR: ${error.message}`);
-    if (error.stack) {
-        log(`[OLED Care] Stack trace:\n${error.stack}`);
-    }
-}
+const Main = isTestEnv 
+    ? (await import('./tests/unit/mocks/main.js')).Main 
+    : (await import('resource:///org/gnome/shell/ui/main.js')).Main;
 
-// Import extension modules
-let OledCareIndicator = null;
+import { Dimming } from './lib/dimming.js';
 
-function init() {
-    ExtensionUtils.initTranslations();
-    return new Extension();
-}
+export const Extension = GObject.registerClass(
+    class Extension extends GObject.Object {
+        constructor() {
+            super();
+            this._dimming = null;
+            this._settings = null;
+            this._settingsChangedId = null;
+        }
 
-class Extension {
-    constructor() {
-        _log('Constructing extension');
-        this._indicator = null;
-    }
+        enable() {
+            this._settings = this.getSettings();
+            this._dimming = new Dimming(this._settings);
+            this._settingsChangedId = this._settings.connect('changed', this._onSettingsChanged.bind(this));
+            this._onSettingsChanged();
+        }
 
-    enable() {
-        _log('Enabling extension');
-        try {
-            // Import indicator the first time 
-            if (!OledCareIndicator) {
-                try {
-                    ({ OledCareIndicator } = Me.imports.lib.indicator);
-                    _log('Successfully imported OledCareIndicator');
-                } catch (error) {
-                    _logError(error);
-                    return;
-                }
+        disable() {
+            if (this._dimming) {
+                this._dimming.destroy();
+                this._dimming = null;
             }
+
+            if (this._settingsChangedId) {
+                this._settings.disconnect(this._settingsChangedId);
+                this._settingsChangedId = null;
+            }
+
+            this._settings = null;
+        }
+
+        _onSettingsChanged() {
+            if (this._dimming) {
+                this._dimming.applyDimming();
+            }
+        }
+
+        getSettings() {
+            const schemaDir = this.path ? GLib.build_filenamev([this.path, 'schemas']) : null;
+            let schemaSource;
             
-            // Only create indicator if we're in an allowed session mode
-            if (Main.sessionMode.allowExtensions) {
-                _log('Session mode allows extensions');
-                this._indicator = new OledCareIndicator();
-                Main.panel.addToStatusArea(Me.metadata.uuid, this._indicator);
-                _log('Indicator added to panel');
+            if (schemaDir && GLib.file_test(schemaDir, GLib.FileTest.IS_DIR)) {
+                schemaSource = Gio.SettingsSchemaSource.new_from_directory(
+                    schemaDir,
+                    Gio.SettingsSchemaSource.get_default(),
+                    false
+                );
             } else {
-                _log('Extensions not allowed in current session mode');
+                schemaSource = Gio.SettingsSchemaSource.get_default();
             }
-        } catch (error) {
-            _logError(error);
-        }
-    }
 
-    disable() {
-        _log('Disabling extension');
-        try {
-            if (this._indicator) {
-                this._indicator.destroy();
-                this._indicator = null;
-                _log('Indicator destroyed');
-            }
-        } catch (error) {
-            _logError(error);
+            const schema = schemaSource.lookup('org.gnome.shell.extensions.oled-dimming', true);
+            return new Gio.Settings({ settings_schema: schema });
         }
     }
-} 
+); 

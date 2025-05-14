@@ -1,148 +1,91 @@
-# OLED Care
+# GNOME OLED Shield Extension
 
-A comprehensive GNOME Shell extension designed to protect OLED displays from burn-in and extend their lifespan. This extension is multi-display aware and provides multiple protection features that can be selectively applied to specific displays.
+A GNOME Shell extension to protect OLED/AMOLED displays from burn-in and image retention.
 
 ## Features
 
-### Display Protection
-- **Multi-Display Support**: Enable/disable OLED protection features per display
-- **Pixel Shift**: Subtle periodic pixel shifting to prevent burn-in
-- **Adaptive Dimming**: Automatically dim the screen when idle
-- **Window Dimming**: Reduce brightness of unfocused windows
-- **True Black Background**: Set desktop background to pure black (#000000) to turn off unused pixels
+- Pixel Shifting: Subtly shifts screen content to prevent static elements from burning in
+- Screen Dimming: Automatically dims the screen after a period of inactivity
+- Window Dimming: Dims unfocused windows to reduce burn-in risk
+- Pixel Refresh: Periodically runs a pixel refresh pattern to help prevent image retention
+- Multi-Display Support: Configurable per-display settings for mixed display setups
+- Smart Scheduling: Intelligent scheduling of refresh operations
 
-### Interface Auto-hiding
-- **Auto-hide Top Panel**: Automatically hide the top panel when not in use
-- **Auto-hide Dash**: Automatically hide the dash/dock when not in use
-- **Smooth Animations**: Gentle fade transitions for all auto-hide features
+## Requirements
 
-### Pixel Refresh
-- **Scheduled Refresh**: Run pixel refresh at specified times
-- **Smart Scheduling**: Only run when system is idle
-- **Progress Tracking**: Real-time progress and time remaining
-- **Manual Control**: Run or cancel refresh on demand
-
-### Customization Options
-- **Dimming Levels**: Adjust brightness reduction (0-50%) for idle dimming
-- **Window Dim Level**: Configure unfocused window dimming (0-40%)
-- **Pixel Shift Interval**: Set time between pixel shifts (60-3600 seconds)
-- **Idle Timeout**: Configure how long to wait before dimming (30-3600 seconds)
-- **Refresh Speed**: Adjust pixel refresh line speed (1-5)
+- GNOME Shell 46 or later
+- GJS (GNOME JavaScript) runtime
+- GNOME Builder (for development)
 
 ## Installation
 
-### From source
+### From GNOME Extensions Website
+1. Visit [extensions.gnome.org](https://extensions.gnome.org)
+2. Search for "OLED Shield"
+3. Toggle the switch to install
 
+### From Source (using GNOME Builder)
 1. Clone this repository:
    ```bash
    git clone https://github.com/kimasplund/gnome-oled-shield.git
    ```
+2. Open the project in GNOME Builder
+3. Click the "Run" button or press Ctrl+F5
 
-2. Install the extension:
-   ```bash
-   cd gnome-oled-shield
-   make install
-   ```
+### Manual Installation
+```bash
+meson setup builddir
+cd builddir
+meson compile
+meson install
+```
 
-3. Restart GNOME Shell:
-   - On X11: Alt+F2, type 'r', press Enter
-   - On Wayland: Log out and log back in
+## Development
 
-4. Enable the extension:
-   ```bash
-   gnome-extensions enable oled-care@asplund.kim
-   ```
+### Building with GNOME Builder
+1. Open GNOME Builder
+2. Click "Clone Repository"
+3. Enter the repository URL
+4. Click "Clone Project"
+5. Click "Run" to test the extension
 
-## Usage
+### Running Tests
+```bash
+./run-tests.sh
+```
 
-After installation, you'll see a display brightness icon in your system tray. Click it to access:
-
-### Quick Settings Menu
-- Enable/disable OLED protection for specific monitors
-- Toggle pixel shift
-- Toggle window dimming
-- Enable/disable true black background
-- Toggle panel and dash auto-hide
-- Access detailed settings
-
-### Settings Dialog
-Access the full settings dialog through:
-- The system tray icon → Settings
-- GNOME Extensions app
-- `gnome-extensions prefs oled-care@asplund.kim`
-
-Available settings are organized into groups:
-
-#### Dimming Settings
-- **Dimming Level**: Adjust the brightness reduction (0-50%)
-- **Screen Dim Timeout**: Set how long to wait before dimming (30-3600 seconds)
-
-#### Window Dimming Settings
-- **Enable Window Dimming**: Toggle dimming of unfocused windows
-- **Window Dim Level**: Set brightness reduction for unfocused windows (0-40%)
-
-#### Pixel Shift Settings
-- **Enable Pixel Shift**: Toggle periodic pixel shifting
-- **Pixel Shift Interval**: Set how often pixels should shift (60-3600 seconds)
-
-#### Interface Settings
-- **True Black Background**: Enable pure black background to turn off unused pixels
-- **Auto-hide Top Panel**: Hide the top panel when not in use
-- **Auto-hide Dash**: Hide the dash/dock when not in use
-
-#### Pixel Refresh Settings
-- **Enable Scheduled Refresh**: Run pixel refresh at specified times
-- **Refresh Speed**: Control the speed of the refresh line
-- **Smart Refresh**: Only run when system is idle
-- **Schedule**: Set specific times for refresh to run
-- **Manual Control**: Run or cancel refresh on demand
-
-## Requirements
-
-- GNOME Shell 45 or later
-- GJS (GNOME JavaScript)
-
-## How It Works
-
-The extension implements several OLED protection strategies:
-
-1. **Pixel Shifting**: Subtly moves screen content by 1 pixel periodically to prevent static image burn-in
-2. **Adaptive Dimming**: Reduces screen brightness during periods of inactivity
-3. **Window Dimming**: Reduces the brightness of unfocused windows to distribute wear
-4. **True Black Background**: Uses pure black (#000000) to completely turn off unused OLED pixels
-5. **Interface Auto-hiding**: Reduces burn-in risk for static interface elements
-6. **Pixel Refresh**: Periodically runs a white line across the screen to exercise pixels
+### Project Structure
+- `extension.js`: Main extension code
+- `lib/`: Core functionality modules
+  - `indicator.js`: Panel indicator implementation
+  - `pixelShift.js`: Screen content shifting logic
+  - `dimming.js`: Screen and window dimming
+  - `displayManager.js`: Multi-display management
+  - `pixelRefresh.js`: Pixel refresh implementation
+- `tests/`: Unit tests
+- `schemas/`: GSettings schemas
+- `meson.build`: Build configuration
+- `metadata.json`: Extension metadata
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request. When contributing, please:
-
-- Follow the existing code style
-- Add comments for complex logic
-- Test your changes with multiple monitors
-- Ensure proper cleanup when the extension is disabled
-
-## Author
-
-- **Kim Asplund**
-- Website: [https://asplund.kim](https://asplund.kim)
-- Email: kim.asplund@gmail.com
-- GitHub: [@kimasplund](https://github.com/kimasplund)
+1. Fork the repository
+2. Create a new branch for your feature
+3. Make your changes
+4. Run the tests
+5. Submit a pull request
 
 ## License
 
-This extension is distributed under the terms of the GNU General Public License, version 2 or later.
+GPL-3.0-or-later
 
-## Support
+## Author
 
-If you encounter any issues or have suggestions, please feel free to:
-1. Open an issue on GitHub
-2. Contact me directly via email
-3. Visit my website for more information
+Kim Asplund (kim.asplund@gmail.com)
 
-## Acknowledgments
+## Links
 
-- GNOME Shell developers for the extension APIs
-- The GNOME community for testing and feedback
-- All contributors who help improve this extension
+- [GitHub Repository](https://github.com/kimasplund/gnome-oled-shield)
+- [Personal Website](https://asplund.kim)
+- [Bug Reports](https://github.com/kimasplund/gnome-oled-shield/issues)
   

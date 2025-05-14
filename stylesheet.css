@@ -1,0 +1,68 @@
+/* Panel Icon */
+.oled-care-icon {
+    icon-size: 16px;
+    padding: 0 4px;
+}
+
+/* Menu Items */
+.oled-care-menu-item {
+    padding: 6px;
+}
+
+.oled-care-menu-item:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Settings Button */
+.oled-care-settings-button {
+    padding: 8px;
+    margin-top: 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Pixel Refresh Progress */
+.oled-care-progress {
+    height: 4px;
+    background-color: rgba(255, 255, 255, 0.2);
+    margin: 4px 0;
+}
+
+.oled-care-progress-bar {
+    background-color: #3584e4;
+    border-radius: 2px;
+}
+
+/* Display List */
+.oled-care-display-list {
+    margin: 8px 0;
+    spacing: 6px;
+}
+
+/* Display Item */
+.oled-care-display-item {
+    padding: 8px;
+    border-radius: 6px;
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.oled-care-display-item:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Feature Toggle */
+.oled-care-feature-toggle {
+    margin: 4px 0;
+    spacing: 8px;
+}
+
+/* Notifications */
+.oled-care-notification {
+    padding: 12px;
+    spacing: 6px;
+}
+
+/* Dimming Effect */
+.oled-care-dim-effect {
+    background-color: rgba(0, 0, 0, 0.5);
+    transition-duration: 200ms;
+} 

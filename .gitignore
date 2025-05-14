@@ -1,23 +1,42 @@
-# Build and distribution directories
-/build/
-/dist/
+# Build directories
+builddir/
+_build/
+builds/
+build/
+
+# GNOME Builder
+.buildconfig
+.cache/
+.flatpak-builder/
+
+# Meson
+meson-logs/
+meson-private/
 
 # Compiled schemas
-/schemas/gschemas.compiled
-*.compiled
+gschemas.compiled
 
-# Node modules (if used for development tools)
-/node_modules/
-
-# Temporary files
+# Backup files
 *~
-.DS_Store
-.directory
+*.bak
 *.swp
 *.swo
-.vscode/
+
+# IDE specific files
 .idea/
-*.bak
+.vscode/
+*.sublime-workspace
+*.sublime-project
+
+# Node modules (if using any JavaScript tools)
+node_modules/
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+.directory
 
 # Logs
 *.log
@@ -35,3 +54,5 @@ yarn-error.log*
 # Specific to this extension
 /.eslintcache
 /coverage/ 
+dist/
+.mcp/

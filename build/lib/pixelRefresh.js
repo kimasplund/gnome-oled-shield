@@ -1,13 +1,20 @@
-// GNOME imports
-const { GObject, Meta, Clutter, St, GLib } = imports.gi;
-const Main = imports.ui.main;
+'use strict';
+
+import GObject from 'gi://GObject';
+import Meta from 'gi://Meta';
+import Clutter from 'gi://Clutter';
+import St from 'gi://St';
+import GLib from 'gi://GLib';
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 // Extension imports
 const ExtensionUtils = imports.misc.extensionUtils;
 const Me = ExtensionUtils.getCurrentExtension();
 
-var PixelRefresh = class PixelRefresh {
+export const PixelRefresh = GObject.registerClass(
+class PixelRefresh extends GObject.Object {
     constructor(settings) {
+        super();
         this._settings = settings;
         this._refreshLines = new Map();
         this._refreshTimeout = null;
@@ -671,4 +678,5 @@ var PixelRefresh = class PixelRefresh {
             this._startRefreshLegacy();
         }
     }
-}; 
+}
+); 

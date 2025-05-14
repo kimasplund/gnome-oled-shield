@@ -1,15 +1,22 @@
 'use strict';
 
-// GNOME Shell imports
-const { GObject, St, GLib, Gio } = imports.gi;
-const Main = imports.ui.main;
-const PanelMenu = imports.ui.panelMenu;
-const PopupMenu = imports.ui.popupMenu;
-const MessageTray = imports.ui.messageTray;
+import GObject from 'gi://GObject';
+import St from 'gi://St';
+import GLib from 'gi://GLib';
+import Gio from 'gi://Gio';
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
+import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
+import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 
 // Extension imports
-const ExtensionUtils = imports.misc.extensionUtils;
-const Me = ExtensionUtils.getCurrentExtension();
+import {ExtensionUtils} from './extensionUtils.js';
+
+// Import extension modules
+import {DisplayManager} from './displayManager.js';
+import {PixelShift} from './pixelShift.js';
+import {Dimming} from './dimming.js';
+import {PixelRefresh} from './pixelRefresh.js';
 
 // Add logging function
 function _log(message) {
@@ -18,18 +25,13 @@ function _log(message) {
     }
 }
 
-// Import extension modules
-const { DisplayManager } = Me.imports.lib.displayManager;
-const { PixelShift } = Me.imports.lib.pixelShift;
-const { Dimming } = Me.imports.lib.dimming;
-const { PixelRefresh } = Me.imports.lib.pixelRefresh;
-
-var OledCareIndicator = GObject.registerClass(
+export const OledCareIndicator = GObject.registerClass(
 class OledCareIndicator extends PanelMenu.Button {
-    _init() {
+    _init(extension) {
         super._init(0.0, 'OLED Care Indicator');
 
-        this._settings = ExtensionUtils.getSettings();
+        this._extension = extension;
+        this._settings = extension.getSettings();
         this._sessionMode = Main.sessionMode;
         this._menuItems = {};  // Initialize menu items container early
         

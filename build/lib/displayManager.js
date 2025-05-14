@@ -1,13 +1,14 @@
-// GNOME imports
-const { GObject, Meta, GLib, Gtk } = imports.gi;
-const Main = imports.ui.main;
+'use strict';
 
-// Extension imports
-const ExtensionUtils = imports.misc.extensionUtils;
-const Me = ExtensionUtils.getCurrentExtension();
+import GObject from 'gi://GObject';
+import Meta from 'gi://Meta';
+import GLib from 'gi://GLib';
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
-var DisplayManager = class DisplayManager {
+export const DisplayManager = GObject.registerClass(
+class DisplayManager extends GObject.Object {
     constructor(settings) {
+        super();
         this._settings = settings;
         this._monitors = [];
         this._monitorManager = Meta.MonitorManager.get();
@@ -526,4 +527,4 @@ var DisplayManager = class DisplayManager {
             }
         });
     }
-}; 
+}); 

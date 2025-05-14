@@ -1,10 +1,9 @@
 'use strict';
 
-// GNOME imports
-const { GLib } = imports.gi;
-const Main = imports.ui.main;
-const ExtensionUtils = imports.misc.extensionUtils;
-const Me = ExtensionUtils.getCurrentExtension();
+import GObject from 'gi://GObject';
+import GLib from 'gi://GLib';
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 // Initialize logging
 function _log(message) {
@@ -21,24 +20,21 @@ function _logError(error) {
 // Import extension modules
 let OledCareIndicator = null;
 
-function init() {
-    ExtensionUtils.initTranslations();
-    return new Extension();
-}
-
-class Extension {
-    constructor() {
+export default class OLEDCareExtension extends Extension {
+    constructor(metadata) {
+        super(metadata);
         _log('Constructing extension');
         this._indicator = null;
     }
 
-    enable() {
+    async enable() {
         _log('Enabling extension');
         try {
             // Import indicator the first time 
             if (!OledCareIndicator) {
                 try {
-                    ({ OledCareIndicator } = Me.imports.lib.indicator);
+                    const {OledCareIndicator: Indicator} = await import('./lib/indicator.js');
+                    OledCareIndicator = Indicator;
                     _log('Successfully imported OledCareIndicator');
                 } catch (error) {
                     _logError(error);
@@ -49,8 +45,8 @@ class Extension {
             // Only create indicator if we're in an allowed session mode
             if (Main.sessionMode.allowExtensions) {
                 _log('Session mode allows extensions');
-                this._indicator = new OledCareIndicator();
-                Main.panel.addToStatusArea(Me.metadata.uuid, this._indicator);
+                this._indicator = new OledCareIndicator(this);
+                Main.panel.addToStatusArea(this.metadata.uuid, this._indicator);
                 _log('Indicator added to panel');
             } else {
                 _log('Extensions not allowed in current session mode');

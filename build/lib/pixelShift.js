@@ -1,6 +1,9 @@
-// GNOME imports
-const { GObject, Meta, GLib } = imports.gi;
-const Main = imports.ui.main;
+'use strict';
+
+import GObject from 'gi://GObject';
+import Meta from 'gi://Meta';
+import GLib from 'gi://GLib';
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 // Extension imports
 const ExtensionUtils = imports.misc.extensionUtils;
@@ -8,8 +11,10 @@ const Me = ExtensionUtils.getCurrentExtension();
 
 const PIXEL_SHIFT_AMOUNT = 1; // pixels to shift
 
-var PixelShift = class PixelShift {
+export const PixelShift = GObject.registerClass(
+class PixelShift extends GObject.Object {
     constructor(settings) {
+        super();
         this._settings = settings;
         this._currentShift = { x: 0, y: 0 };
         this._pixelShiftTimeout = null;
@@ -233,4 +238,4 @@ var PixelShift = class PixelShift {
             display.set_monitor_position_offset(monitor.index, shift.x, shift.y);
         });
     }
-}; 
+}); 

@@ -132,11 +132,12 @@ jobs:
 
           # Run Tests with Coverage
           mkdir -p coverage
+          GJS_PATH="/usr/share/gnome-shell${GJS_PATH:+:$GJS_PATH}" \
+          GI_TYPELIB_PATH="/usr/lib/gnome-shell${GI_TYPELIB_PATH:+:$GI_TYPELIB_PATH}" \
           gjs \
-            -I /usr/share/gnome-shell \
-            -I . \
-            --coverage \
-            tests/environment/**/*.test.js > coverage/lcov.info || true
+            --include-path=/usr/share/gnome-shell \
+            --include-path=. \
+            -m tests/environment/**/*.test.js > coverage/lcov.info || true
           cat coverage/lcov.info
 
       - name: Upload coverage

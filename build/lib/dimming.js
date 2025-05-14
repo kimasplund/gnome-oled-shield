@@ -1,13 +1,15 @@
-// GNOME imports
-const { GObject, Meta, Clutter, GLib } = imports.gi;
-const Main = imports.ui.main;
+'use strict';
 
-// Extension imports
-const ExtensionUtils = imports.misc.extensionUtils;
-const Me = ExtensionUtils.getCurrentExtension();
+import GObject from 'gi://GObject';
+import Meta from 'gi://Meta';
+import Clutter from 'gi://Clutter';
+import GLib from 'gi://GLib';
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
-var Dimming = class Dimming {
+export const Dimming = GObject.registerClass(
+class Dimming extends GObject.Object {
     constructor(settings) {
+        super();
         this._settings = settings;
         this._dimEffect = null;
         this._idleTimeout = null;
@@ -361,4 +363,4 @@ var Dimming = class Dimming {
             this._windowDimEffects.delete(window);
         }
     }
-}; 
+}); 

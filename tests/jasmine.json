@@ -1,0 +1,17 @@
+{
+    "spec_dir": "tests",
+    "spec_files": [
+        "unit/**/*[sS]pec.js",
+        "unit/**/*.test.js",
+        "unit/**/test-*.js",
+        "!unit/extension/test-extension.js",
+        "!**/*.esm.js"
+    ],
+    "helpers": [
+        "helpers/**/*.js",
+        "unit/mocks/**/*.js",
+        "testUtils.js"
+    ],
+    "stopSpecOnExpectationFailure": false,
+    "random": false
+}

@@ -1,0 +1,12 @@
+{
+    "spec_dir": "tests",
+    "spec_files": [
+        "test-pixelshift.js"
+    ],
+    "helpers": [
+        "helpers/**/*.js",
+        "testUtils.js"
+    ],
+    "stopSpecOnExpectationFailure": false,
+    "random": false
+} 

@@ -105,9 +105,101 @@ lint:
 	fi
 
 # Run tests (placeholder for future test implementation)
-test:
-	@echo "Running tests..."
-	@echo "No tests implemented yet"
+test: validate-json test-unit test-integration test-environment
+
+test-unit:
+	@echo "Running unit tests..."
+	@if command -v jasmine >/dev/null 2>&1; then \
+		jasmine --config=tests/jasmine.json; \
+	else \
+		echo "Jasmine not found. Please install with: npm install -g jasmine"; \
+		exit 1; \
+	fi
+
+test-integration:
+	@echo "Running integration tests..."
+	@if [ -f tests/run-integration-tests.sh ]; then \
+		bash tests/run-integration-tests.sh; \
+	else \
+		echo "Integration tests not set up yet"; \
+	fi
+
+test-environment:
+	@echo "Running environment-specific tests..."
+	@if [ -f tests/run-environment-tests.sh ]; then \
+		bash tests/run-environment-tests.sh; \
+	else \
+		echo "Setting up environment tests..."; \
+		cp tests/run-integration-tests.sh tests/run-environment-tests.sh; \
+		sed -i 's/integration/environment/g' tests/run-environment-tests.sh; \
+		chmod +x tests/run-environment-tests.sh; \
+		bash tests/run-environment-tests.sh; \
+	fi
+
+test-pixelshift:
+	@echo "Running pixel shift tests..."
+	@if command -v jasmine >/dev/null 2>&1; then \
+		JASMINE_CONFIG_PATH=tests/pixelshift-jasmine.json jasmine; \
+	else \
+		echo "Jasmine not found. Please install with: npm install -g jasmine"; \
+		exit 1; \
+	fi
+
+test-setup:
+	@echo "Setting up test environment..."
+	@mkdir -p tests/unit
+	@mkdir -p tests/integration
+	@mkdir -p tests/environment
+	@if [ ! -f tests/jasmine.json ]; then \
+		echo '{ \
+			"spec_dir": "tests", \
+			"spec_files": [ \
+				"unit/**/*[sS]pec.js", \
+				"unit/**/*.test.js", \
+				"unit/**/test-*.js" \
+			], \
+			"helpers": [ \
+				"helpers/**/*.js", \
+				"unit/mocks/**/*.js" \
+			], \
+			"stopSpecOnExpectationFailure": false, \
+			"random": false \
+		}' > tests/jasmine.json; \
+	fi
+	@if [ ! -f tests/pixelshift-jasmine.json ]; then \
+		echo '{ \
+			"spec_dir": "tests", \
+			"spec_files": [ \
+				"test-pixelshift.js" \
+			], \
+			"helpers": [ \
+				"helpers/**/*.js", \
+				"testUtils.js" \
+			], \
+			"stopSpecOnExpectationFailure": false, \
+			"random": false \
+		}' > tests/pixelshift-jasmine.json; \
+	fi
+	@if [ ! -f tests/run-integration-tests.sh ]; then \
+		echo '#!/bin/bash \
+		\necho "Integration tests would run a headless GNOME session and verify extension behavior" \
+		\n# Add actual integration test implementation here' > tests/run-integration-tests.sh; \
+		chmod +x tests/run-integration-tests.sh; \
+	fi
+	@if [ ! -f tests/run-environment-tests.sh ]; then \
+		echo '#!/bin/bash \
+		\necho "Environment tests would simulate different GNOME environments" \
+		\n# Add actual environment test implementation here' > tests/run-environment-tests.sh; \
+		chmod +x tests/run-environment-tests.sh; \
+	fi
+	@if [ ! -f tests/unit/example.spec.js ]; then \
+		mkdir -p tests/unit; \
+		echo "describe('OLED Care Extension', () => { \
+		\n  it('should pass a simple test', () => { \
+		\n    expect(true).toBe(true); \
+		\n  }); \
+		\n});" > tests/unit/example.spec.js; \
+	fi
 
 # Clean build artifacts
 clean:

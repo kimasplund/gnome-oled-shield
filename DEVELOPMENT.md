@@ -6,7 +6,7 @@ This document provides instructions for building, debugging, and developing the 
 
 Before you start, ensure you have the following installed:
 
-- GNOME Shell (version 45 or later)
+- GNOME Shell (version 46 or later)
 - GJS (GNOME JavaScript)
 - Build dependencies:
   - `jq` - For JSON manipulation
