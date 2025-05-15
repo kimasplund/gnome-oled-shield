@@ -5,14 +5,16 @@ import Meta from 'gi://Meta';
 import GLib from 'gi://GLib';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
-export const DisplayManager = GObject.registerClass(
+export default GObject.registerClass({
+    GTypeName: 'OledCareDisplayManager'
+},
 class DisplayManager extends GObject.Object {
     constructor(settings) {
         super();
         this._settings = settings;
         this._monitors = [];
         this._monitorManager = Meta.MonitorManager.get();
-        this._useNewDisplayManager = Main.layoutManager._startingUp !== undefined;
+
         this._usePortalAPI = false;
         this._protectedDisplays = new Map(); // Track protection state
         
@@ -184,66 +186,73 @@ class DisplayManager extends GObject.Object {
     }
 
     _applyProtection(monitor) {
-        try {
-            const monitorId = this._getMonitorId(monitor);
-            if (this._protectedDisplays.has(monitorId)) {
-                this._log(`Display ${monitorId} already protected`);
-                return;
-            }
+        const monitorId = this._getMonitorId(monitor);
+        this._log(`Applying protection to display ${monitorId}`);
 
-            // Implementation depends on display server and GNOME version
+        try {
+            // Apply protection based on display server and GNOME version
             if (this._usePortalAPI) {
                 this._applyProtectionPortal(monitor);
-            } else if (this._useNewDisplayManager) {
-                this._applyProtectionNew(monitor);
             } else {
-                this._applyProtectionLegacy(monitor);
+                this._applyProtectionNew(monitor);
             }
 
+            // Store protection state for this monitor
             this._protectedDisplays.set(monitorId, {
                 brightness: this._settings.get_int('display-brightness'),
                 contrast: this._settings.get_int('display-contrast'),
                 timestamp: Date.now()
             });
-            this._log(`Protection applied to display ${monitorId}`);
+
+            this._log(`Protected display ${monitorId}`);
         } catch (error) {
-            this._log(`Error applying protection to monitor ${monitor.index}: ${error.message}`);
+            this._log(`Failed to apply protection to ${monitorId}: ${error.message}`);
+            return false;
         }
+
+        return true;
     }
 
     _applyLimitedProtection(monitor) {
-        // Limited protection for lock screen
-        if (this._usePortalAPI) {
-            this._applyLimitedProtectionPortal(monitor);
-        } else if (this._useNewDisplayManager) {
-            this._applyLimitedProtectionNew(monitor);
-        } else {
-            this._applyLimitedProtectionLegacy(monitor);
+        const monitorId = this._getMonitorId(monitor);
+        this._log(`Applying limited protection to display ${monitorId}`);
+
+        try {
+            if (this._usePortalAPI) {
+                this._applyLimitedProtectionPortal(monitor);
+            } else {
+                this._applyLimitedProtectionNew(monitor);
+            }
+
+            this._log(`Limited protection applied to display ${monitorId}`);
+        } catch (error) {
+            this._log(`Failed to apply limited protection to ${monitorId}: ${error.message}`);
+            return false;
         }
+
+        return true;
     }
 
     _removeProtection(monitor) {
-        try {
-            const monitorId = this._getMonitorId(monitor);
-            if (!this._protectedDisplays.has(monitorId)) {
-                this._log(`Display ${monitorId} not protected`);
-                return;
-            }
+        const monitorId = this._getMonitorId(monitor);
+        this._log(`Removing protection from display ${monitorId}`);
 
-            // Cleanup protection effects
+        try {
             if (this._usePortalAPI) {
                 this._removeProtectionPortal(monitor);
-            } else if (this._useNewDisplayManager) {
-                this._removeProtectionNew(monitor);
             } else {
-                this._removeProtectionLegacy(monitor);
+                this._removeProtectionNew(monitor);
             }
 
+            // Remove monitor from protected displays list
             this._protectedDisplays.delete(monitorId);
             this._log(`Protection removed from display ${monitorId}`);
         } catch (error) {
-            this._log(`Error removing protection from monitor ${monitor.index}: ${error.message}`);
+            this._log(`Failed to remove protection from ${monitorId}: ${error.message}`);
+            return false;
         }
+
+        return true;
     }
 
     // Portal API implementations (GNOME 47+)
@@ -309,40 +318,7 @@ class DisplayManager extends GObject.Object {
         connector.set_power_save_mode(false);
     }
 
-    // Legacy API implementations (GNOME 45)
-    _applyProtectionLegacy(monitor) {
-        const display = global.display;
-        if (!display) return;
 
-        const brightness = this._settings.get_int('display-brightness');
-        const contrast = this._settings.get_int('display-contrast');
-
-        // Use legacy display configuration API
-        display.set_backlight_for_monitor(monitor.index, brightness / 100);
-        display.set_contrast_for_monitor(monitor.index, contrast / 100);
-        display.set_power_save_mode_for_monitor(monitor.index, true);
-    }
-
-    _applyLimitedProtectionLegacy(monitor) {
-        const display = global.display;
-        if (!display) return;
-
-        // In limited mode, only enable power saving
-        display.set_power_save_mode_for_monitor(monitor.index, true);
-    }
-
-    _removeProtectionLegacy(monitor) {
-        const display = global.display;
-        if (!display) return;
-
-        // Reset all display settings to defaults
-        display.set_backlight_for_monitor(monitor.index, 1.0);
-        display.set_contrast_for_monitor(monitor.index, 1.0);
-        display.set_power_save_mode_for_monitor(monitor.index, false);
-
-        // Log cleanup for debugging
-        this._log(`Legacy protection removed from monitor ${monitor.index}`);
-    }
 
     showDisplaySelector() {
         this._log('Showing display selector');
@@ -468,15 +444,10 @@ class DisplayManager extends GObject.Object {
                         if (monitorConfig) {
                             monitorConfig.set_backlight_level(brightness / 100);
                         }
-                    } else if (this._useNewDisplayManager) {
+                    } else {
                         const connector = Meta.MonitorManager.get().get_monitor_connector(monitor.index);
                         if (connector) {
                             connector.set_backlight(brightness / 100);
-                        }
-                    } else {
-                        const display = global.display;
-                        if (display) {
-                            display.set_backlight_for_monitor(monitor.index, brightness / 100);
                         }
                     }
                     this._log(`Updated brightness for display ${monitorId}`);
@@ -509,15 +480,10 @@ class DisplayManager extends GObject.Object {
                         if (monitorConfig) {
                             monitorConfig.set_contrast(contrast / 100);
                         }
-                    } else if (this._useNewDisplayManager) {
+                    } else {
                         const connector = Meta.MonitorManager.get().get_monitor_connector(monitor.index);
                         if (connector) {
                             connector.set_contrast(contrast / 100);
-                        }
-                    } else {
-                        const display = global.display;
-                        if (display) {
-                            display.set_contrast_for_monitor(monitor.index, contrast / 100);
                         }
                     }
                     this._log(`Updated contrast for display ${monitorId}`);

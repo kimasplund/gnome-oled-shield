@@ -8,20 +8,24 @@ import GLib from 'gi://GLib';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 // Extension imports
-const ExtensionUtils = imports.misc.extensionUtils;
-const Me = ExtensionUtils.getCurrentExtension();
+import * as ExtensionUtils from 'resource:///org/gnome/shell/misc/extensionUtils.js';
 
-export const PixelRefresh = GObject.registerClass(
+export default GObject.registerClass({
+    GTypeName: 'OledCarePixelRefresh'
+},
 class PixelRefresh extends GObject.Object {
     constructor(settings) {
         super();
         this._settings = settings;
-        this._refreshLines = new Map();
         this._refreshTimeout = null;
-        this._useNewDisplayManager = Main.layoutManager._startingUp !== undefined;
+        this._refreshLines = new Map();
+        this._scheduler = null;
+        this._schedulerTimeout = null;
         this._usePortalAPI = this._checkPortalSupport();
+        this._cancelRequested = false;
         this._lastFrameTime = 0;
         this._frameCount = 0;
+
         this._performanceMonitoringActive = false;
 
         // Validate settings
@@ -315,53 +319,45 @@ class PixelRefresh extends GObject.Object {
     }
 
     _startRefresh() {
-        this._log('Starting refresh');
+        this._log('Starting pixel refresh');
         if (!this._shouldRunRefresh()) {
-            this._log('Skipping refresh due to conditions not met');
-            this._scheduleNextRefresh();
+            this._log('Refresh conditions not met, skipping');
             return;
         }
 
+        // Update settings state
         this._settings.set_boolean('pixel-refresh-running', true);
         this._settings.set_int('pixel-refresh-progress', 0);
-        this._settings.set_int('pixel-refresh-time-remaining', this._calculateRefreshDuration());
-
-        this._startPerformanceMonitoring();
-
+        
         // Start refresh based on display server and GNOME version
         if (this._usePortalAPI) {
             this._startRefreshPortal();
-        } else if (this._useNewDisplayManager) {
-            this._startRefreshNew();
         } else {
-            this._startRefreshLegacy();
+            this._startRefreshNew();
+        }
+        
+        // Reset manual trigger if set
+        if (this._settings.get_boolean('pixel-refresh-manual-trigger')) {
+            this._settings.set_boolean('pixel-refresh-manual-trigger', false);
         }
     }
 
     _cancelRefresh() {
-        if (this._refreshTimeout) {
-            GLib.source_remove(this._refreshTimeout);
-            this._refreshTimeout = null;
+        this._log('Cancelling pixel refresh');
+        
+        // Cancel refresh based on display server and GNOME version
+        if (this._usePortalAPI) {
+            this._cancelRefreshPortal();
+        } else {
+            this._cancelRefreshNew();
         }
-
-        if (this._settings.get_boolean('pixel-refresh-running')) {
-            // Cancel refresh based on display server and GNOME version
-            if (this._usePortalAPI) {
-                this._cancelRefreshPortal();
-            } else if (this._useNewDisplayManager) {
-                this._cancelRefreshNew();
-            } else {
-                this._cancelRefreshLegacy();
-            }
-
-            this._stopPerformanceMonitoring();
-            this._settings.set_boolean('pixel-refresh-running', false);
-            this._settings.set_int('pixel-refresh-progress', 0);
-            this._settings.set_int('pixel-refresh-time-remaining', 0);
-            this._settings.set_boolean('pixel-refresh-manual-trigger', false);
-            this._settings.set_string('pixel-refresh-next-run', '');
-            this._log('Refresh cancelled');
-        }
+        
+        // Reset refresh state
+        this._settings.set_boolean('pixel-refresh-running', false);
+        this._settings.set_int('pixel-refresh-progress', 0);
+        this._settings.set_int('pixel-refresh-time-remaining', 0);
+        this._settings.set_boolean('pixel-refresh-manual-trigger', false);
+        this._settings.set_string('pixel-refresh-next-run', '');
     }
 
     _isSystemIdle() {
@@ -522,65 +518,6 @@ class PixelRefresh extends GObject.Object {
         this._refreshLines.clear();
     }
 
-    // Legacy API implementations (GNOME 45)
-    _startRefreshLegacy() {
-        const duration = this._calculateRefreshDuration() * 1000;
-        const refreshInterval = Math.floor(duration / 100);
-
-        Main.layoutManager.monitors.forEach(monitor => {
-            // Create refresh effect with optimal line height
-            const refreshLine = new St.Widget({
-                style_class: 'pixel-refresh-line',
-                height: this._calculateRefreshLineHeight(monitor),
-                width: monitor.width,
-                x: monitor.x,
-                y: monitor.y
-            });
-
-            Main.layoutManager.addChrome(refreshLine);
-            this._refreshLines.set(monitor, refreshLine);
-
-            // Start animation
-            let progress = 0;
-            const refreshTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, refreshInterval, () => {
-                progress++;
-                refreshLine.y = monitor.y + Math.floor((monitor.height * progress) / 100);
-                this._updateProgress(progress);
-
-                if (progress >= 100) {
-                    this._refreshLines.delete(monitor);
-                    Main.layoutManager.removeChrome(refreshLine);
-                    return GLib.SOURCE_REMOVE;
-                }
-                return GLib.SOURCE_CONTINUE;
-            });
-
-            // Store timeout for cancellation
-            this._refreshTimeout = refreshTimeout;
-        });
-    }
-
-    _cancelRefreshLegacy() {
-        if (this._refreshTimeout) {
-            GLib.source_remove(this._refreshTimeout);
-            this._refreshTimeout = null;
-        }
-
-        this._refreshLines.forEach((line, monitor) => {
-            Main.layoutManager.removeChrome(line);
-        });
-        this._refreshLines.clear();
-
-        // Reset refresh state
-        this._settings.set_boolean('pixel-refresh-running', false);
-        this._settings.set_int('pixel-refresh-progress', 0);
-        this._settings.set_int('pixel-refresh-time-remaining', 0);
-        this._settings.set_boolean('pixel-refresh-manual-trigger', false);
-        this._settings.set_string('pixel-refresh-next-run', '');
-
-        this._log('Legacy refresh cancelled and state reset');
-    }
-
     _shouldRunRefresh() {
         // Check if refresh is already running
         if (this._settings.get_boolean('pixel-refresh-running')) {
@@ -672,10 +609,8 @@ class PixelRefresh extends GObject.Object {
         // Start refresh based on display server and GNOME version
         if (this._usePortalAPI) {
             this._startRefreshPortal();
-        } else if (this._useNewDisplayManager) {
-            this._startRefreshNew();
         } else {
-            this._startRefreshLegacy();
+            this._startRefreshNew();
         }
     }
 }

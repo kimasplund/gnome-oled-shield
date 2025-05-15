@@ -11,7 +11,7 @@ const isTestEnv = GLib.getenv('G_TEST_SRCDIR') !== null;
 const Gtk = isTestEnv ? null : (await import('gi://Gtk?version=4.0'));
 const Adw = isTestEnv ? (await import('./tests/unit/mocks/adw.js')) : (await import('gi://Adw?version=1'));
 
-const { ExtensionPreferences: BasePreferences } = isTestEnv 
+const { ExtensionPreferences } = isTestEnv 
     ? (await import('./tests/unit/mocks/prefs.js'))
     : (await import('resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js'));
 
@@ -28,9 +28,7 @@ function _logError(error) {
     }
 }
 
-export const ExtensionPreferences = GObject.registerClass({
-    GTypeName: 'OledDimmingPreferences'
-}, class ExtensionPreferences extends BasePreferences {
+export default class OledCarePreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         _log('Building preferences window');
         try {
@@ -630,21 +628,6 @@ export const ExtensionPreferences = GObject.registerClass({
         }
     }
 
-    getSettings() {
-        const schemaDir = this.path ? GLib.build_filenamev([this.path, 'schemas']) : null;
-        let schemaSource;
-        
-        if (schemaDir && GLib.file_test(schemaDir, GLib.FileTest.IS_DIR)) {
-            schemaSource = Gio.SettingsSchemaSource.new_from_directory(
-                schemaDir,
-                Gio.SettingsSchemaSource.get_default(),
-                false
-            );
-        } else {
-            schemaSource = Gio.SettingsSchemaSource.get_default();
-        }
-
-        const schema = schemaSource.lookup('org.gnome.shell.extensions.oled-dimming', true);
-        return new Gio.Settings({ settings_schema: schema });
-    }
-}); 
+    // Using parent class's getSettings() method which correctly uses the extension metadata
+    // to determine the schema ID
+} 

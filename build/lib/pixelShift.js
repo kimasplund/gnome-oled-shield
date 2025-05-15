@@ -6,19 +6,18 @@ import GLib from 'gi://GLib';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 // Extension imports
-const ExtensionUtils = imports.misc.extensionUtils;
-const Me = ExtensionUtils.getCurrentExtension();
+import * as ExtensionUtils from 'resource:///org/gnome/shell/misc/extensionUtils.js';
 
 const PIXEL_SHIFT_AMOUNT = 1; // pixels to shift
 
-export const PixelShift = GObject.registerClass(
-class PixelShift extends GObject.Object {
+export default GObject.registerClass({
+    GTypeName: 'OledCarePixelShift'
+}, class PixelShift extends GObject.Object {
     constructor(settings) {
         super();
         this._settings = settings;
         this._currentShift = { x: 0, y: 0 };
         this._pixelShiftTimeout = null;
-        this._useNewDisplayManager = Main.layoutManager._startingUp !== undefined;
         this._usePortalAPI = this._checkPortalSupport();
         this._lastFrameTime = 0;
         this._frameCount = 0;
@@ -151,10 +150,8 @@ class PixelShift extends GObject.Object {
         // Apply shift based on display server and GNOME version
         if (this._usePortalAPI) {
             this._applyShiftPortal(newShift);
-        } else if (this._useNewDisplayManager) {
-            this._applyShiftNew(newShift);
         } else {
-            this._applyShiftLegacy(newShift);
+            this._applyShiftNew(newShift);
         }
 
         this._currentShift = newShift;
@@ -169,10 +166,8 @@ class PixelShift extends GObject.Object {
             // Reset shift based on display server and GNOME version
             if (this._usePortalAPI) {
                 this._applyShiftPortal(this._currentShift);
-            } else if (this._useNewDisplayManager) {
-                this._applyShiftNew(this._currentShift);
             } else {
-                this._applyShiftLegacy(this._currentShift);
+                this._applyShiftNew(this._currentShift);
             }
         }
     }
@@ -229,13 +224,5 @@ class PixelShift extends GObject.Object {
         });
     }
 
-    // Legacy API implementation (GNOME 45)
-    _applyShiftLegacy(shift) {
-        const display = global.display;
-        if (!display) return;
 
-        Main.layoutManager.monitors.forEach(monitor => {
-            display.set_monitor_position_offset(monitor.index, shift.x, shift.y);
-        });
-    }
 }); 

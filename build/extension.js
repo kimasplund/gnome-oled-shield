@@ -2,70 +2,93 @@
 
 import GObject from 'gi://GObject';
 import GLib from 'gi://GLib';
-import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
+import Gio from 'gi://Gio';
+import St from 'gi://St';
+import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
+import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
-// Initialize logging
-function _log(message) {
-    log(`[OLED Care] ${message}`);
-}
+// Import modules conditionally based on environment
+const isTestEnv = GLib.getenv('G_TEST_SRCDIR') !== null;
 
-function _logError(error) {
-    log(`[OLED Care] ERROR: ${error.message}`);
-    if (error.stack) {
-        log(`[OLED Care] Stack trace:\n${error.stack}`);
-    }
-}
+const Main = isTestEnv 
+    ? (await import('./tests/unit/mocks/main.js')).Main 
+    : (await import('resource:///org/gnome/shell/ui/main.js')).Main;
 
-// Import extension modules
-let OledCareIndicator = null;
+import { Extension as BaseExtension } from 'resource:///org/gnome/shell/extensions/extension.js';
+import Dimming from './lib/dimming.js';
 
-export default class OLEDCareExtension extends Extension {
+export default class OledCareExtension extends BaseExtension {
     constructor(metadata) {
         super(metadata);
-        _log('Constructing extension');
+        this._dimming = null;
+        this._settings = null;
+        this._settingsChangedId = null;
         this._indicator = null;
     }
 
-    async enable() {
-        _log('Enabling extension');
-        try {
-            // Import indicator the first time 
-            if (!OledCareIndicator) {
-                try {
-                    const {OledCareIndicator: Indicator} = await import('./lib/indicator.js');
-                    OledCareIndicator = Indicator;
-                    _log('Successfully imported OledCareIndicator');
-                } catch (error) {
-                    _logError(error);
-                    return;
-                }
-            }
-            
-            // Only create indicator if we're in an allowed session mode
-            if (Main.sessionMode.allowExtensions) {
-                _log('Session mode allows extensions');
-                this._indicator = new OledCareIndicator(this);
-                Main.panel.addToStatusArea(this.metadata.uuid, this._indicator);
-                _log('Indicator added to panel');
-            } else {
-                _log('Extensions not allowed in current session mode');
-            }
-        } catch (error) {
-            _logError(error);
-        }
+    enable() {
+        this._settings = this.getSettings();
+        this._dimming = new Dimming(this._settings);
+        this._settingsChangedId = this._settings.connect('changed', this._onSettingsChanged.bind(this));
+        
+        // Create indicator
+        this._indicator = new PanelMenu.Button(0.0, 'OLED Care', false);
+        const icon = new St.Icon({
+            icon_name: 'oled-care-symbolic',
+            style_class: 'system-status-icon',
+        });
+        this._indicator.add_child(icon);
+        
+        // Add menu items
+        const menu = this._indicator.menu;
+        const dimItem = new PopupMenu.PopupSwitchMenuItem('Screen Dimming', 
+            this._settings.get_boolean('screen-dim-enabled'));
+        
+        dimItem.connect('toggled', (item) => {
+            this._settings.set_boolean('screen-dim-enabled', item.state);
+        });
+        
+        menu.addMenuItem(dimItem);
+        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        
+        const settingsItem = new PopupMenu.PopupMenuItem('Settings');
+        settingsItem.connect('activate', () => {
+            this.openPreferences();
+        });
+        
+        menu.addMenuItem(settingsItem);
+        
+        // Add to panel
+        Main.panel.addToStatusArea('oled-care', this._indicator);
+        
+        this._onSettingsChanged();
     }
 
     disable() {
-        _log('Disabling extension');
-        try {
-            if (this._indicator) {
-                this._indicator.destroy();
-                this._indicator = null;
-                _log('Indicator destroyed');
-            }
-        } catch (error) {
-            _logError(error);
+        if (this._indicator) {
+            this._indicator.destroy();
+            this._indicator = null;
+        }
+
+        if (this._dimming) {
+            this._dimming.destroy();
+            this._dimming = null;
+        }
+
+        if (this._settingsChangedId) {
+            this._settings.disconnect(this._settingsChangedId);
+            this._settingsChangedId = null;
+        }
+
+        this._settings = null;
+    }
+
+    _onSettingsChanged() {
+        if (this._dimming) {
+            this._dimming.applyDimming();
         }
     }
+
+    // Using parent class's getSettings() method which correctly uses the extension metadata
+    // to determine the schema ID
 } 

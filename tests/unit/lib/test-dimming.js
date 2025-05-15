@@ -5,7 +5,7 @@ import GLib from 'gi://GLib';
 import { Main } from '../mocks/main.js';
 import { WindowActor } from '../mocks/meta.js';
 import { BrightnessContrastEffect } from '../mocks/clutter.js';
-import { Dimming } from '../../../lib/dimming.js';
+import Dimming from '../../../lib/dimming.js';
 import { describe, it, beforeEach, afterEach, assertValueEquals, assertNotNull, assertEffectRemoved } from '../localTestUtils.js';
 
 let windowActor;
@@ -21,8 +21,8 @@ describe('Dimming', () => {
 
         // Create mock settings
         settings = {
-            get_boolean: (key) => key === 'dimming-enabled' ? true : false,
-            get_int: (key) => key === 'dimming-brightness' ? 50 : 0
+            get_boolean: (key) => key === 'screen-dim-enabled' || key === 'debug-mode' ? true : false,
+            get_int: (key) => key === 'dimming-level' ? 50 : 0
         };
     });
 
