@@ -33,6 +33,8 @@ COVERAGE_DIR="$RUNTIME_DIR/coverage"
 mkdir -p "$COVERAGE_DIR"
 
 echo "Running tests..."
+
+# Run root level tests
 for test_file in "$SRCDIR"/tests/test-*.js; do
     if [ -f "$test_file" ]; then
         test_name=$(basename "$test_file" .js)
@@ -45,6 +47,24 @@ for test_file in "$SRCDIR"/tests/test-*.js; do
             > "$RESULTS_DIR/${test_name}.log" 2>&1 || {
             echo "Test $test_name failed!"
             cat "$RESULTS_DIR/${test_name}.log"
+            exit 1
+        }
+    fi
+done
+
+# Run unit tests
+for test_file in "$SRCDIR"/tests/unit/test-*.js; do
+    if [ -f "$test_file" ]; then
+        test_name=$(basename "$test_file" .js)
+        echo "Running unit test: $test_name..."
+        
+        # Run test with coverage
+        gjs --coverage-prefix="$SRCDIR" \
+            --coverage-output="$COVERAGE_DIR/unit-${test_name}.lcov" \
+            -m "$test_file" \
+            > "$RESULTS_DIR/unit-${test_name}.log" 2>&1 || {
+            echo "Unit test $test_name failed!"
+            cat "$RESULTS_DIR/unit-${test_name}.log"
             exit 1
         }
     fi
