@@ -6,7 +6,7 @@ import GObject from 'gi://GObject';
  * Mock Main module for GNOME Shell extension testing
  * Provides mock implementations of GNOME Shell's Main module components
  */
-export const Main = {
+const Main = {
     // Notification system
     notify: (title, body) => {
         console.log(`[MOCK] Notification: ${title} - ${body}`);
@@ -242,5 +242,43 @@ export const Main = {
         });
         
         return new obj();
-    })()
-}; 
+    })(),
+    
+    /**
+     * Panel mock
+     */
+    panel: {
+        /**
+         * Add item to status area
+         * @param {string} id - Item ID
+         * @param {object} indicator - Indicator object
+         * @returns {object} Added item
+         */
+        addToStatusArea(id, indicator) {
+            console.log(`[MOCK] Added ${id} to status area`);
+            return indicator;
+        },
+        
+        /**
+         * Remove item from status area
+         * @param {string} id - Item ID
+         */
+        removeFromStatusArea(id) {
+            console.log(`[MOCK] Removed ${id} from status area`);
+        }
+    },
+    
+    /**
+     * Shell wrapper for DBus services
+     */
+    shellDBusService: {
+        /**
+         * Shell proxy mock
+         */
+        shellProxy: {
+            // Add any needed properties or methods
+        }
+    }
+};
+
+export default Main; 
