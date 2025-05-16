@@ -58,15 +58,46 @@ for test_file in "$SRCDIR"/tests/unit/test-*.js; do
         test_name=$(basename "$test_file" .js)
         echo "Running unit test: $test_name..."
         
-        # Run test with coverage
-        gjs --coverage-prefix="$SRCDIR" \
-            --coverage-output="$COVERAGE_DIR/unit-${test_name}.lcov" \
-            -m "$test_file" \
-            > "$RESULTS_DIR/unit-${test_name}.log" 2>&1 || {
-            echo "Unit test $test_name failed!"
-            cat "$RESULTS_DIR/unit-${test_name}.log"
-            exit 1
-        }
+        # Special handling for session-specific tests
+        if [[ "$test_name" == *"-sessions"* ]]; then
+            echo "Running session-specific test: $test_name..."
+            
+            # For session-specific tests, set environment variables
+            # to simulate different session types
+            export GNOME_SESSION_TYPE="wayland"
+            gjs --coverage-prefix="$SRCDIR" \
+                --coverage-output="$COVERAGE_DIR/unit-${test_name}-wayland.lcov" \
+                -m "$test_file" \
+                > "$RESULTS_DIR/unit-${test_name}-wayland.log" 2>&1 || {
+                echo "Unit test $test_name (wayland) failed!"
+                cat "$RESULTS_DIR/unit-${test_name}-wayland.log"
+                exit 1
+            }
+            
+            # Run with X11 environment
+            export GNOME_SESSION_TYPE="x11"
+            gjs --coverage-prefix="$SRCDIR" \
+                --coverage-output="$COVERAGE_DIR/unit-${test_name}-x11.lcov" \
+                -m "$test_file" \
+                > "$RESULTS_DIR/unit-${test_name}-x11.log" 2>&1 || {
+                echo "Unit test $test_name (x11) failed!"
+                cat "$RESULTS_DIR/unit-${test_name}-x11.log"
+                exit 1
+            }
+            
+            # Reset environment variable
+            unset GNOME_SESSION_TYPE
+        else
+            # Regular test
+            gjs --coverage-prefix="$SRCDIR" \
+                --coverage-output="$COVERAGE_DIR/unit-${test_name}.lcov" \
+                -m "$test_file" \
+                > "$RESULTS_DIR/unit-${test_name}.log" 2>&1 || {
+                echo "Unit test $test_name failed!"
+                cat "$RESULTS_DIR/unit-${test_name}.log"
+                exit 1
+            }
+        fi
     fi
 done
 

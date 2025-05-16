@@ -60,6 +60,32 @@ test_env = environment()
 test_env.set('G_TEST_SRCDIR', meson.current_source_dir())
 test_env.set('G_TEST_BUILDDIR', meson.current_build_dir())
 
+# Add all test files explicitly to ensure they're included in the build
+test_files = [
+    'tests/testUtils.js',
+    'tests/unit/localTestUtils.js',
+    'tests/unit/test-compatibility.js',
+    'tests/unit/test-eventEmitter-sessions.js',
+    'tests/unit/mocks/abort.js',
+    'tests/unit/mocks/global.js',
+    'tests/unit/mocks/meta.js',
+    'tests/unit/mocks/main.js',
+    'tests/unit/mocks/adw.js',
+    'tests/unit/mocks/gio.js',
+    'tests/unit/mocks/gtk.js',
+    'tests/unit/mocks/clutter.js',
+    'tests/unit/mocks/timeout.js',
+    'tests/unit/mocks/misc.js',
+    'tests/unit/mocks/prefs.js',
+    'tests/test-modern-features.js',
+    'tests/test-modernization.js',
+    'tests/test-pixelshift.js',
+]
+
+# Install test files
+install_data(test_files,
+    install_dir: join_paths(get_option('datadir'), 'gnome-shell/extensions', uuid, 'tests'))
+
 # Add test
 test('extension-tests',
     find_program('run-tests.sh'),
@@ -77,10 +103,19 @@ run_target('zip',
         'cp -r ' + ' '.join(lib_files) + ' build/lib/ && ' +
         'mkdir -p build/schemas && ' +
         'cp -r schemas/*.xml build/schemas/ && ' +
+        'mkdir -p build/tests/unit/mocks && ' +
+        'cp -r tests/testUtils.js build/tests/ && ' +
+        'cp -r tests/test-*.js build/tests/ && ' +
+        'cp -r tests/unit/test-*.js build/tests/unit/ && ' +
+        'cp -r tests/unit/localTestUtils.js build/tests/unit/ && ' +
+        'cp -r tests/unit/mocks/*.js build/tests/unit/mocks/ && ' +
+        'cp -r run-tests.sh build/ && ' +
+        'cp -r build-and-install.sh build/ && ' +
         'cd build && ' +
         'glib-compile-schemas schemas/ && ' +
         'zip -r ../dist/' + uuid + '-v' + metadata_json + '.zip ' +
-        '    extension.js prefs.js metadata.json stylesheet.css schemas/ lib/'
+        '    extension.js prefs.js metadata.json stylesheet.css schemas/ lib/ ' +
+        '    tests/ run-tests.sh build-and-install.sh'
     ],
     depends: []
 ) 
