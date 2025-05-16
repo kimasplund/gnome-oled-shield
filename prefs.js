@@ -8,46 +8,267 @@ import GLib from 'gi://GLib';
 const isTestEnv = GLib.getenv('G_TEST_SRCDIR') !== null;
 
 // Import Gtk and Adw conditionally
-const Gtk = isTestEnv ? null : (await import('gi://Gtk?version=4.0'));
-const Adw = isTestEnv ? (await import('./tests/unit/mocks/adw.js')) : (await import('gi://Adw?version=1'));
+let Gtk, Adw;
+try {
+    Gtk = isTestEnv ? null : (await import('gi://Gtk?version=4.0'));
+    Adw = isTestEnv ? (await import('./tests/unit/mocks/adw.js')) : (await import('gi://Adw?version=1'));
+} catch (error) {
+    console.error(`[OLED Care Prefs] Failed to import UI libraries: ${error.message}`);
+    // Return early in case import fails (will be caught in fillPreferencesWindow)
+}
 
 const { ExtensionPreferences } = isTestEnv 
     ? (await import('./tests/unit/mocks/prefs.js'))
     : (await import('resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js'));
 
-// Add logging function
-function _log(message) {
-    log(`[OLED Care Prefs] ${message}`);
+/**
+ * Enhanced logging function with debug mode awareness
+ * @param {string} message - Message to log
+ * @param {Gio.Settings} [settings] - Optional settings object to check debug mode
+ */
+function _log(message, settings = null) {
+    // Use nullish coalescing for safer default values
+    const debugMode = settings?.get_boolean('debug-mode') ?? true;
+    if (debugMode) {
+        log(`[OLED Care Prefs] ${message}`);
+    }
 }
 
-// Add error logging
-function _logError(error) {
-    log(`[OLED Care Prefs] ERROR: ${error.message}`);
-    if (error.stack) {
-        log(`[OLED Care Prefs] Stack trace:\n${error.stack}`);
+/**
+ * Enhanced error logging with more context
+ * @param {Error} error - Error object to log
+ * @param {string} [context] - Optional context string
+ * @param {Gio.Settings} [settings] - Optional settings object to check debug mode
+ */
+function _logError(error, context = '', settings = null) {
+    // Use nullish coalescing and optional chaining for safer access
+    const debugMode = settings?.get_boolean('debug-mode') ?? true;
+    if (debugMode) {
+        const contextStr = context ? ` (${context})` : '';
+        const message = error?.message ?? 'Unknown error';
+        log(`[OLED Care Prefs] ERROR${contextStr}: ${message}`);
+        // Use optional chaining and logical AND for conditional logging
+        error?.stack && log(`[OLED Care Prefs] Stack trace:\n${error.stack}`);
     }
 }
 
 export default class OledCarePreferences extends ExtensionPreferences {
+    // Static initialization block for constants and schema definitions
+    static {
+        this.DEBUG_MODE_KEY = 'debug-mode';
+        
+        // Define schema key groups
+        this.BOOLEAN_KEYS = [
+            'debug-mode', 
+            'screen-dim-enabled', 
+            'pixel-shift-enabled',
+            'unfocus-dim-enabled',
+            'true-black-background',
+            'autohide-top-panel',
+            'autohide-dash',
+            'pixel-refresh-enabled',
+            'pixel-refresh-smart',
+            'pixel-refresh-running'
+        ];
+        
+        this.INTEGER_KEYS = [
+            'dimming-level', 
+            'screen-dim-timeout',
+            'display-brightness',
+            'display-contrast',
+            'unfocus-dim-level',
+            'pixel-shift-interval',
+            'pixel-refresh-interval',
+            'pixel-refresh-speed',
+            'pixel-refresh-progress',
+            'pixel-refresh-time-remaining'
+        ];
+        
+        this.STRING_KEYS = [
+            'pixel-refresh-next-run'
+        ];
+        
+        this.STRING_ARRAY_KEYS = [
+            'enabled-displays',
+            'pixel-refresh-schedule'
+        ];
+    }
+    
+    // Private fields using # prefix for true encapsulation
+    #settings;
+    #signalIds = [];
+    
+    /**
+     * Create and populate the preferences window
+     * @param {Adw.PreferencesWindow} window - The preferences window to fill
+     * @returns {Adw.PreferencesWindow} The populated window
+     */
     fillPreferencesWindow(window) {
         _log('Building preferences window');
+        
         try {
-            const settings = this.getSettings();
-            _log('Settings loaded');
+            // Get settings
+            this.#settings = this.getSettings();
+            if (!this.#settings) {
+                throw new Error('Failed to get extension settings');
+            }
+            _log('Settings loaded', this.#settings);
 
+            // Enable debug logging for development
+            this.#settings.set_boolean(OledCarePreferences.DEBUG_MODE_KEY, true);
+            
             // Create a preferences page
             const page = new Adw.PreferencesPage();
             window.add(page);
-
+            
             // In test environment, return early with basic structure
             if (isTestEnv) {
-                _log('Test environment detected, returning basic window structure');
+                _log('Test environment detected, returning basic window structure', this.#settings);
                 return window;
             }
 
-            // Enable debug logging for development
-            settings.set_boolean('debug-mode', true);
+            // Validate required settings
+            if (!this.#validateSettings()) {
+                throw new Error('Settings validation failed');
+            }
 
+            // Build UI groups using Promise.allSettled for parallel component loading
+            this.#loadAllComponents(page).catch(error => {
+                _logError(error, 'component loading', this.#settings);
+            });
+            
+        } catch (error) {
+            _logError(error, 'fillPreferencesWindow');
+            
+            // In test environment, return window even if there's an error
+            if (isTestEnv) {
+                return window;
+            }
+            
+            // For production, create an error message row
+            try {
+                this.#createErrorUI(window, error);
+            } catch (secondaryError) {
+                // If even the error UI fails, just log it
+                _logError(secondaryError, 'error UI creation');
+            }
+        }
+        
+        // Return the window object to provide UI to the preferences dialog
+        return window;
+    }
+    
+    /**
+     * Create error UI when preferences fail to load
+     * @param {Adw.PreferencesWindow} window - The window to add error UI to
+     * @param {Error} error - The error that occurred
+     * @private
+     */
+    #createErrorUI(window, error) {
+        const errorPage = new Adw.PreferencesPage();
+        window.add(errorPage);
+        
+        const errorGroup = new Adw.PreferencesGroup({
+            title: 'Error Loading Preferences'
+        });
+        errorPage.add(errorGroup);
+        
+        const errorRow = new Adw.ActionRow({
+            title: 'An error occurred',
+            subtitle: `${error?.message ?? 'Unknown error'}. Please check system logs for details.`
+        });
+        errorGroup.add(errorRow);
+    }
+    
+    /**
+     * Load all UI components in parallel with error handling
+     * @param {Adw.PreferencesPage} page - The page to add components to
+     * @private
+     */
+    async #loadAllComponents(page) {
+        // Create an array of component building promises
+        const componentPromises = [
+            this.#buildDisplaySettings(page),
+            this.#buildDimmingSettings(page),
+            this.#buildWindowDimmingSettings(page),
+            this.#buildPixelShiftSettings(page),
+            this.#buildInterfaceSettings(page),
+            this.#buildPixelRefreshSettings(page)
+        ];
+        
+        // Execute all promises and get results
+        const results = await Promise.allSettled(componentPromises);
+        
+        // Track failed components
+        const failedComponents = results
+            .map((result, index) => result.status === 'rejected' ? index : null)
+            .filter(index => index !== null);
+            
+        if (failedComponents.length > 0) {
+            _logError(
+                new Error(`Failed to load components: ${failedComponents.join(', ')}`),
+                'loadAllComponents',
+                this.#settings
+            );
+        }
+    }
+    
+    /**
+     * Validate that all required settings are available
+     * @returns {boolean} True if validation passed
+     * @private
+     */
+    #validateSettings() {
+        try {
+            // Use static class properties for key lists
+            const { BOOLEAN_KEYS, INTEGER_KEYS, STRING_KEYS, STRING_ARRAY_KEYS } = OledCarePreferences;
+            
+            // Check boolean keys
+            for (const key of BOOLEAN_KEYS) {
+                if (this.#settings.get_boolean(key) === undefined) {
+                    _logError(new Error(`Missing required boolean setting: ${key}`), 'validateSettings', this.#settings);
+                    return false;
+                }
+            }
+            
+            // Check integer keys
+            for (const key of INTEGER_KEYS) {
+                if (this.#settings.get_int(key) === undefined) {
+                    _logError(new Error(`Missing required integer setting: ${key}`), 'validateSettings', this.#settings);
+                    return false;
+                }
+            }
+            
+            // Check string keys
+            for (const key of STRING_KEYS) {
+                if (this.#settings.get_string(key) === undefined) {
+                    _logError(new Error(`Missing required string setting: ${key}`), 'validateSettings', this.#settings);
+                    return false;
+                }
+            }
+            
+            // Check string array keys
+            for (const key of STRING_ARRAY_KEYS) {
+                if (this.#settings.get_strv(key) === undefined) {
+                    _logError(new Error(`Missing required string array setting: ${key}`), 'validateSettings', this.#settings);
+                    return false;
+                }
+            }
+            
+            return true;
+        } catch (error) {
+            _logError(error, 'validateSettings', this.#settings);
+            return false;
+        }
+    }
+    
+    /**
+     * Create a preferences group for display settings
+     * @param {Adw.PreferencesPage} page - The page to add the group to
+     * @private
+     */
+    #buildDisplaySettings(page) {
+        try {
             // Display settings group
             const displayGroup = new Adw.PreferencesGroup({
                 title: 'Display Settings',
@@ -56,82 +277,50 @@ export default class OledCarePreferences extends ExtensionPreferences {
             page.add(displayGroup);
 
             // Screen dim enable switch
-            const screenDimRow = new Adw.ActionRow({
+            const screenDimRow = this.#createSwitchRow({
                 title: 'Enable Screen Dimming',
-                subtitle: 'Automatically dim the screen when idle'
+                subtitle: 'Automatically dim the screen when idle',
+                settingsKey: 'screen-dim-enabled'
             });
-            const screenDimSwitch = new Gtk.Switch({
-                active: settings.get_boolean('screen-dim-enabled'),
-                valign: Gtk.Align.CENTER
-            });
-            screenDimRow.add_suffix(screenDimSwitch);
             displayGroup.add(screenDimRow);
 
-            settings.bind(
-                'screen-dim-enabled',
-                screenDimSwitch,
-                'active',
-                Gio.SettingsBindFlags.DEFAULT
-            );
-
             // Display brightness
-            const brightnessRow = new Adw.ActionRow({
+            const brightnessRow = this.#createSpinButtonRow({
                 title: 'Display Brightness',
-                subtitle: 'Brightness level for OLED displays (10-100%)'
+                subtitle: 'Brightness level for OLED displays (10-100%)',
+                settingsKey: 'display-brightness',
+                min: 10,
+                max: 100,
+                step: 1,
+                pageStep: 10
             });
-            const brightnessAdjustment = new Gtk.Adjustment({
-                lower: 10,
-                upper: 100,
-                step_increment: 1,
-                page_increment: 10,
-                value: settings.get_int('display-brightness')
-            });
-            const brightnessSpinButton = new Gtk.SpinButton({
-                adjustment: brightnessAdjustment,
-                climb_rate: 1,
-                digits: 0,
-                numeric: true,
-                valign: Gtk.Align.CENTER
-            });
-            brightnessRow.add_suffix(brightnessSpinButton);
             displayGroup.add(brightnessRow);
 
-            settings.bind(
-                'display-brightness',
-                brightnessSpinButton,
-                'value',
-                Gio.SettingsBindFlags.DEFAULT
-            );
-
             // Display contrast
-            const contrastRow = new Adw.ActionRow({
+            const contrastRow = this.#createSpinButtonRow({
                 title: 'Display Contrast',
-                subtitle: 'Contrast level for OLED displays (50-150%)'
+                subtitle: 'Contrast level for OLED displays (50-150%)',
+                settingsKey: 'display-contrast',
+                min: 50,
+                max: 150,
+                step: 1,
+                pageStep: 10
             });
-            const contrastAdjustment = new Gtk.Adjustment({
-                lower: 50,
-                upper: 150,
-                step_increment: 1,
-                page_increment: 10,
-                value: settings.get_int('display-contrast')
-            });
-            const contrastSpinButton = new Gtk.SpinButton({
-                adjustment: contrastAdjustment,
-                climb_rate: 1,
-                digits: 0,
-                numeric: true,
-                valign: Gtk.Align.CENTER
-            });
-            contrastRow.add_suffix(contrastSpinButton);
             displayGroup.add(contrastRow);
-
-            settings.bind(
-                'display-contrast',
-                contrastSpinButton,
-                'value',
-                Gio.SettingsBindFlags.DEFAULT
-            );
-
+            
+        } catch (error) {
+            _logError(error, 'buildDisplaySettings', this.#settings);
+            throw error; // Rethrow for Promise.allSettled to catch
+        }
+    }
+    
+    /**
+     * Create a preferences group for dimming settings
+     * @param {Adw.PreferencesPage} page - The page to add the group to
+     * @private
+     */
+    #buildDimmingSettings(page) {
+        try {
             // Dimming settings group
             const dimmingGroup = new Adw.PreferencesGroup({
                 title: 'Dimming Settings',
@@ -140,63 +329,42 @@ export default class OledCarePreferences extends ExtensionPreferences {
             page.add(dimmingGroup);
 
             // Dimming level
-            const dimmingRow = new Adw.ActionRow({
+            const dimmingRow = this.#createSpinButtonRow({
                 title: 'Dimming Level',
-                subtitle: 'Percentage of brightness reduction (0-50%)'
+                subtitle: 'Percentage of brightness reduction (0-50%)',
+                settingsKey: 'dimming-level',
+                min: 0,
+                max: 50,
+                step: 1,
+                pageStep: 10
             });
-            const dimmingAdjustment = new Gtk.Adjustment({
-                lower: 0,
-                upper: 50,
-                step_increment: 1,
-                page_increment: 10,
-                value: settings.get_int('dimming-level')
-            });
-            const dimmingSpinButton = new Gtk.SpinButton({
-                adjustment: dimmingAdjustment,
-                climb_rate: 1,
-                digits: 0,
-                numeric: true,
-                valign: Gtk.Align.CENTER
-            });
-            dimmingRow.add_suffix(dimmingSpinButton);
             dimmingGroup.add(dimmingRow);
 
-            settings.bind(
-                'dimming-level',
-                dimmingSpinButton,
-                'value',
-                Gio.SettingsBindFlags.DEFAULT
-            );
-
             // Screen dim timeout
-            const timeoutRow = new Adw.ActionRow({
+            const timeoutRow = this.#createSpinButtonRow({
                 title: 'Screen Dim Timeout',
-                subtitle: 'Time in seconds before dimming (30-3600)'
+                subtitle: 'Time in seconds before dimming (30-3600)',
+                settingsKey: 'screen-dim-timeout',
+                min: 30,
+                max: 3600,
+                step: 30,
+                pageStep: 300
             });
-            const timeoutAdjustment = new Gtk.Adjustment({
-                lower: 30,
-                upper: 3600,
-                step_increment: 30,
-                page_increment: 300,
-                value: settings.get_int('screen-dim-timeout')
-            });
-            const timeoutSpinButton = new Gtk.SpinButton({
-                adjustment: timeoutAdjustment,
-                climb_rate: 1,
-                digits: 0,
-                numeric: true,
-                valign: Gtk.Align.CENTER
-            });
-            timeoutRow.add_suffix(timeoutSpinButton);
             dimmingGroup.add(timeoutRow);
-
-            settings.bind(
-                'screen-dim-timeout',
-                timeoutSpinButton,
-                'value',
-                Gio.SettingsBindFlags.DEFAULT
-            );
-
+            
+        } catch (error) {
+            _logError(error, 'buildDimmingSettings', this.#settings);
+            throw error;
+        }
+    }
+    
+    /**
+     * Create a preferences group for window dimming settings
+     * @param {Adw.PreferencesPage} page - The page to add the group to
+     * @private
+     */
+    #buildWindowDimmingSettings(page) {
+        try {
             // Window dimming settings group
             const windowDimGroup = new Adw.PreferencesGroup({
                 title: 'Window Dimming Settings',
@@ -205,53 +373,38 @@ export default class OledCarePreferences extends ExtensionPreferences {
             page.add(windowDimGroup);
 
             // Window dim enable switch
-            const windowDimRow = new Adw.ActionRow({
+            const windowDimRow = this.#createSwitchRow({
                 title: 'Enable Window Dimming',
-                subtitle: 'Dim unfocused windows to reduce OLED wear'
+                subtitle: 'Dim unfocused windows to reduce OLED wear',
+                settingsKey: 'unfocus-dim-enabled'
             });
-            const windowDimSwitch = new Gtk.Switch({
-                active: settings.get_boolean('unfocus-dim-enabled'),
-                valign: Gtk.Align.CENTER
-            });
-            windowDimRow.add_suffix(windowDimSwitch);
             windowDimGroup.add(windowDimRow);
 
-            settings.bind(
-                'unfocus-dim-enabled',
-                windowDimSwitch,
-                'active',
-                Gio.SettingsBindFlags.DEFAULT
-            );
-
             // Window dim level
-            const windowDimLevelRow = new Adw.ActionRow({
+            const windowDimLevelRow = this.#createSpinButtonRow({
                 title: 'Window Dim Level',
-                subtitle: 'Percentage of brightness reduction for unfocused windows (0-40%)'
+                subtitle: 'Percentage of brightness reduction for unfocused windows (0-40%)',
+                settingsKey: 'unfocus-dim-level',
+                min: 0,
+                max: 40,
+                step: 1,
+                pageStep: 5
             });
-            const windowDimAdjustment = new Gtk.Adjustment({
-                lower: 0,
-                upper: 40,
-                step_increment: 1,
-                page_increment: 5,
-                value: settings.get_int('unfocus-dim-level')
-            });
-            const windowDimSpinButton = new Gtk.SpinButton({
-                adjustment: windowDimAdjustment,
-                climb_rate: 1,
-                digits: 0,
-                numeric: true,
-                valign: Gtk.Align.CENTER
-            });
-            windowDimLevelRow.add_suffix(windowDimSpinButton);
             windowDimGroup.add(windowDimLevelRow);
-
-            settings.bind(
-                'unfocus-dim-level',
-                windowDimSpinButton,
-                'value',
-                Gio.SettingsBindFlags.DEFAULT
-            );
-
+            
+        } catch (error) {
+            _logError(error, 'buildWindowDimmingSettings', this.#settings);
+            throw error;
+        }
+    }
+    
+    /**
+     * Create a preferences group for pixel shift settings
+     * @param {Adw.PreferencesPage} page - The page to add the group to
+     * @private
+     */
+    #buildPixelShiftSettings(page) {
+        try {
             // Pixel shift settings group
             const pixelShiftGroup = new Adw.PreferencesGroup({
                 title: 'Pixel Shift Settings',
@@ -260,53 +413,38 @@ export default class OledCarePreferences extends ExtensionPreferences {
             page.add(pixelShiftGroup);
 
             // Pixel shift enable switch
-            const pixelShiftRow = new Adw.ActionRow({
+            const pixelShiftRow = this.#createSwitchRow({
                 title: 'Enable Pixel Shift',
-                subtitle: 'Periodically shift pixels to prevent burn-in'
+                subtitle: 'Periodically shift pixels to prevent burn-in',
+                settingsKey: 'pixel-shift-enabled'
             });
-            const pixelShiftSwitch = new Gtk.Switch({
-                active: settings.get_boolean('pixel-shift-enabled'),
-                valign: Gtk.Align.CENTER
-            });
-            pixelShiftRow.add_suffix(pixelShiftSwitch);
             pixelShiftGroup.add(pixelShiftRow);
 
-            settings.bind(
-                'pixel-shift-enabled',
-                pixelShiftSwitch,
-                'active',
-                Gio.SettingsBindFlags.DEFAULT
-            );
-
             // Pixel shift interval
-            const shiftIntervalRow = new Adw.ActionRow({
+            const shiftIntervalRow = this.#createSpinButtonRow({
                 title: 'Pixel Shift Interval',
-                subtitle: 'Time in seconds between shifts (60-3600)'
+                subtitle: 'Time in seconds between shifts (60-3600)',
+                settingsKey: 'pixel-shift-interval',
+                min: 60,
+                max: 3600,
+                step: 60,
+                pageStep: 300
             });
-            const shiftIntervalAdjustment = new Gtk.Adjustment({
-                lower: 60,
-                upper: 3600,
-                step_increment: 60,
-                page_increment: 300,
-                value: settings.get_int('pixel-shift-interval')
-            });
-            const shiftIntervalSpinButton = new Gtk.SpinButton({
-                adjustment: shiftIntervalAdjustment,
-                climb_rate: 1,
-                digits: 0,
-                numeric: true,
-                valign: Gtk.Align.CENTER
-            });
-            shiftIntervalRow.add_suffix(shiftIntervalSpinButton);
             pixelShiftGroup.add(shiftIntervalRow);
-
-            settings.bind(
-                'pixel-shift-interval',
-                shiftIntervalSpinButton,
-                'value',
-                Gio.SettingsBindFlags.DEFAULT
-            );
-
+            
+        } catch (error) {
+            _logError(error, 'buildPixelShiftSettings', this.#settings);
+            throw error;
+        }
+    }
+    
+    /**
+     * Create a preferences group for interface settings
+     * @param {Adw.PreferencesPage} page - The page to add the group to
+     * @private
+     */
+    #buildInterfaceSettings(page) {
+        try {
             // Interface settings group
             const interfaceGroup = new Adw.PreferencesGroup({
                 title: 'Interface Settings',
@@ -315,62 +453,42 @@ export default class OledCarePreferences extends ExtensionPreferences {
             page.add(interfaceGroup);
 
             // True black background switch
-            const blackBgRow = new Adw.ActionRow({
+            const blackBgRow = this.#createSwitchRow({
                 title: 'True Black Background',
-                subtitle: 'Set desktop background to pure black to turn off unused pixels'
+                subtitle: 'Set desktop background to pure black to turn off unused pixels',
+                settingsKey: 'true-black-background'
             });
-            const blackBgSwitch = new Gtk.Switch({
-                active: settings.get_boolean('true-black-background'),
-                valign: Gtk.Align.CENTER
-            });
-            blackBgRow.add_suffix(blackBgSwitch);
             interfaceGroup.add(blackBgRow);
 
-            settings.bind(
-                'true-black-background',
-                blackBgSwitch,
-                'active',
-                Gio.SettingsBindFlags.DEFAULT
-            );
-
             // Panel auto-hide switch
-            const panelHideRow = new Adw.ActionRow({
+            const panelHideRow = this.#createSwitchRow({
                 title: 'Auto-hide Top Panel',
-                subtitle: 'Hide the top panel when not in use'
+                subtitle: 'Hide the top panel when not in use',
+                settingsKey: 'autohide-top-panel'
             });
-            const panelHideSwitch = new Gtk.Switch({
-                active: settings.get_boolean('autohide-top-panel'),
-                valign: Gtk.Align.CENTER
-            });
-            panelHideRow.add_suffix(panelHideSwitch);
             interfaceGroup.add(panelHideRow);
 
-            settings.bind(
-                'autohide-top-panel',
-                panelHideSwitch,
-                'active',
-                Gio.SettingsBindFlags.DEFAULT
-            );
-
             // Dash auto-hide switch
-            const dashHideRow = new Adw.ActionRow({
+            const dashHideRow = this.#createSwitchRow({
                 title: 'Auto-hide Dash',
-                subtitle: 'Hide the dash/dock when not in use'
+                subtitle: 'Hide the dash/dock when not in use',
+                settingsKey: 'autohide-dash'
             });
-            const dashHideSwitch = new Gtk.Switch({
-                active: settings.get_boolean('autohide-dash'),
-                valign: Gtk.Align.CENTER
-            });
-            dashHideRow.add_suffix(dashHideSwitch);
             interfaceGroup.add(dashHideRow);
-
-            settings.bind(
-                'autohide-dash',
-                dashHideSwitch,
-                'active',
-                Gio.SettingsBindFlags.DEFAULT
-            );
-
+            
+        } catch (error) {
+            _logError(error, 'buildInterfaceSettings', this.#settings);
+            throw error;
+        }
+    }
+    
+    /**
+     * Create a preferences group for pixel refresh settings
+     * @param {Adw.PreferencesPage} page - The page to add the group to
+     * @private
+     */
+    #buildPixelRefreshSettings(page) {
+        try {
             // Pixel Refresh settings group
             const refreshGroup = new Adw.PreferencesGroup({
                 title: 'Pixel Refresh Settings',
@@ -379,125 +497,105 @@ export default class OledCarePreferences extends ExtensionPreferences {
             page.add(refreshGroup);
 
             // Enable pixel refresh
-            const refreshRow = new Adw.ActionRow({
+            const refreshRow = this.#createSwitchRow({
                 title: 'Enable Pixel Refresh',
-                subtitle: 'Run a white line across the screen periodically to refresh pixels'
+                subtitle: 'Run a white line across the screen periodically to refresh pixels',
+                settingsKey: 'pixel-refresh-enabled'
             });
-            const refreshSwitch = new Gtk.Switch({
-                active: settings.get_boolean('pixel-refresh-enabled'),
-                valign: Gtk.Align.CENTER
-            });
-            refreshRow.add_suffix(refreshSwitch);
             refreshGroup.add(refreshRow);
 
-            settings.bind(
-                'pixel-refresh-enabled',
-                refreshSwitch,
-                'active',
-                Gio.SettingsBindFlags.DEFAULT
-            );
-
             // Refresh interval
-            const refreshIntervalRow = new Adw.ActionRow({
+            const refreshIntervalRow = this.#createSpinButtonRow({
                 title: 'Refresh Interval',
-                subtitle: 'Time in minutes between refresh cycles (60-1440)'
+                subtitle: 'Time in minutes between refresh cycles (60-1440)',
+                settingsKey: 'pixel-refresh-interval',
+                min: 60,
+                max: 1440,
+                step: 30,
+                pageStep: 60
             });
-            const refreshIntervalAdjustment = new Gtk.Adjustment({
-                lower: 60,
-                upper: 1440,
-                step_increment: 30,
-                page_increment: 60,
-                value: settings.get_int('pixel-refresh-interval')
-            });
-            const refreshIntervalSpinButton = new Gtk.SpinButton({
-                adjustment: refreshIntervalAdjustment,
-                climb_rate: 1,
-                digits: 0,
-                numeric: true,
-                valign: Gtk.Align.CENTER
-            });
-            refreshIntervalRow.add_suffix(refreshIntervalSpinButton);
             refreshGroup.add(refreshIntervalRow);
 
-            settings.bind(
-                'pixel-refresh-interval',
-                refreshIntervalSpinButton,
-                'value',
-                Gio.SettingsBindFlags.DEFAULT
-            );
-
             // Refresh speed
-            const speedRow = new Adw.ActionRow({
+            const speedRow = this.#createSpinButtonRow({
                 title: 'Refresh Line Speed',
-                subtitle: 'Speed of the refresh line movement (1-5, slower to faster)'
+                subtitle: 'Speed of the refresh line movement (1-5, slower to faster)',
+                settingsKey: 'pixel-refresh-speed',
+                min: 1,
+                max: 5,
+                step: 1,
+                pageStep: 1
             });
-            const speedAdjustment = new Gtk.Adjustment({
-                lower: 1,
-                upper: 5,
-                step_increment: 1,
-                page_increment: 1,
-                value: settings.get_int('pixel-refresh-speed')
-            });
-            const speedSpinButton = new Gtk.SpinButton({
-                adjustment: speedAdjustment,
-                climb_rate: 1,
-                digits: 0,
-                numeric: true,
-                valign: Gtk.Align.CENTER
-            });
-            speedRow.add_suffix(speedSpinButton);
             refreshGroup.add(speedRow);
 
-            settings.bind(
-                'pixel-refresh-speed',
-                speedSpinButton,
-                'value',
-                Gio.SettingsBindFlags.DEFAULT
-            );
-
             // Smart refresh
-            const smartRow = new Adw.ActionRow({
+            const smartRow = this.#createSwitchRow({
                 title: 'Smart Refresh',
-                subtitle: 'Only run when system is idle and no fullscreen apps are active'
+                subtitle: 'Only run when system is idle and no fullscreen apps are active',
+                settingsKey: 'pixel-refresh-smart'
             });
-            const smartSwitch = new Gtk.Switch({
-                active: settings.get_boolean('pixel-refresh-smart'),
-                valign: Gtk.Align.CENTER
-            });
-            smartRow.add_suffix(smartSwitch);
             refreshGroup.add(smartRow);
 
-            settings.bind(
-                'pixel-refresh-smart',
-                smartSwitch,
-                'active',
-                Gio.SettingsBindFlags.DEFAULT
-            );
-
             // Schedule editor
+            this.#buildScheduleEditor(refreshGroup);
+            
+            // Status indicator
+            this.#buildStatusIndicator(refreshGroup);
+            
+            // Manual control buttons
+            this.#buildManualControls(refreshGroup);
+            
+        } catch (error) {
+            _logError(error, 'buildPixelRefreshSettings', this.#settings);
+            throw error;
+        }
+    }
+    
+    /**
+     * Create the schedule editor UI component
+     * @param {Adw.PreferencesGroup} group - The group to add the component to
+     * @private
+     */
+    #buildScheduleEditor(group) {
+        try {
             const scheduleRow = new Adw.ActionRow({
                 title: 'Refresh Schedule',
                 subtitle: 'Times when pixel refresh can run (24-hour format)'
             });
             
             const scheduleEntry = new Gtk.Entry({
-                text: settings.get_strv('pixel-refresh-schedule').join(', '),
+                text: this.#settings.get_strv('pixel-refresh-schedule').join(', '),
                 valign: Gtk.Align.CENTER,
                 width_chars: 30
             });
             
-            scheduleEntry.connect('changed', () => {
-                let times = scheduleEntry.get_text()
+            const changeId = scheduleEntry.connect('changed', () => {
+                const times = scheduleEntry.get_text()
                     .split(',')
                     .map(t => t.trim())
                     .filter(t => /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(t));
-                settings.set_strv('pixel-refresh-schedule', times);
+                this.#settings.set_strv('pixel-refresh-schedule', times);
             });
             
+            // Track signal for cleanup
+            this.#trackSignal(scheduleEntry, changeId, 'changed');
+            
             scheduleRow.add_suffix(scheduleEntry);
-            refreshGroup.add(scheduleRow);
-
-            // Status indicator
+            group.add(scheduleRow);
+            
+        } catch (error) {
+            _logError(error, 'buildScheduleEditor', this.#settings);
+            throw error;
+        }
+    }
+    
+    /**
+     * Create the status indicator UI component
+     * @param {Adw.PreferencesGroup} group - The group to add the component to
+     * @private
+     */
+    #buildStatusIndicator(group) {
+        try {
             const statusRow = new Adw.ActionRow({
                 title: 'Status',
             });
@@ -535,54 +633,95 @@ export default class OledCarePreferences extends ExtensionPreferences {
             statusBox.append(timeRemainingLabel);
             statusBox.append(progressBar);
             statusRow.add_suffix(statusBox);
-            refreshGroup.add(statusRow);
+            group.add(statusRow);
 
-            // Update status indicators when settings change
-            settings.connect('changed::pixel-refresh-running', () => {
-                let running = settings.get_boolean('pixel-refresh-running');
-                statusLabel.set_text(running ? 'Running' : 'Idle');
-                statusLabel.set_css_classes(running ? ['caption', 'accent'] : ['caption', 'dim-label']);
-                progressBar.set_visible(running);
-                timeRemainingLabel.set_visible(running);
-            });
+            // Update status indicators when settings change - with modern signal handling
+            this.#trackSignal(
+                this.#settings, 
+                this.#settings.connect('changed::pixel-refresh-running', () => {
+                    const running = this.#settings.get_boolean('pixel-refresh-running');
+                    statusLabel.set_text(running ? 'Running' : 'Idle');
+                    statusLabel.set_css_classes(running ? ['caption', 'accent'] : ['caption', 'dim-label']);
+                    progressBar.set_visible(running);
+                    timeRemainingLabel.set_visible(running);
+                }),
+                'changed::pixel-refresh-running'
+            );
 
-            settings.connect('changed::pixel-refresh-progress', () => {
-                let progress = settings.get_int('pixel-refresh-progress');
-                progressBar.set_fraction(progress / 100.0);
-                if (progress > 0) {
-                    progressBar.set_text(`${progress}%`);
-                    progressBar.set_show_text(true);
-                }
-            });
+            this.#trackSignal(
+                this.#settings,
+                this.#settings.connect('changed::pixel-refresh-progress', () => {
+                    const progress = this.#settings.get_int('pixel-refresh-progress');
+                    progressBar.set_fraction(progress / 100.0);
+                    if (progress > 0) {
+                        progressBar.set_text(`${progress}%`);
+                        progressBar.set_show_text(true);
+                    }
+                }),
+                'changed::pixel-refresh-progress'
+            );
 
-            settings.connect('changed::pixel-refresh-time-remaining', () => {
-                let seconds = settings.get_int('pixel-refresh-time-remaining');
-                if (seconds > 0) {
-                    let minutes = Math.floor(seconds / 60);
-                    seconds = seconds % 60;
-                    timeRemainingLabel.set_text(
-                        `Time remaining: ${minutes}:${seconds.toString().padStart(2, '0')}`
-                    );
-                } else {
-                    timeRemainingLabel.set_text('');
-                }
-            });
+            this.#trackSignal(
+                this.#settings,
+                this.#settings.connect('changed::pixel-refresh-time-remaining', () => {
+                    const seconds = this.#settings.get_int('pixel-refresh-time-remaining');
+                    if (seconds > 0) {
+                        const minutes = Math.floor(seconds / 60);
+                        const secs = seconds % 60;
+                        timeRemainingLabel.set_text(
+                            `Time remaining: ${minutes}:${secs.toString().padStart(2, '0')}`
+                        );
+                    } else {
+                        timeRemainingLabel.set_text('');
+                    }
+                }),
+                'changed::pixel-refresh-time-remaining'
+            );
 
-            settings.connect('changed::pixel-refresh-next-run', () => {
-                let nextRun = settings.get_string('pixel-refresh-next-run');
-                if (nextRun) {
-                    let date = new Date(nextRun);
-                    let timeString = date.toLocaleTimeString(undefined, {
-                        hour: '2-digit',
-                        minute: '2-digit'
-                    });
-                    nextRunLabel.set_text(`Next run: ${timeString}`);
-                } else {
-                    nextRunLabel.set_text('Next run: Not scheduled');
-                }
-            });
-
-            // Manual control buttons
+            this.#trackSignal(
+                this.#settings,
+                this.#settings.connect('changed::pixel-refresh-next-run', () => {
+                    const nextRun = this.#settings.get_string('pixel-refresh-next-run');
+                    if (nextRun) {
+                        const date = new Date(nextRun);
+                        const timeString = date.toLocaleTimeString(undefined, {
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        });
+                        nextRunLabel.set_text(`Next run: ${timeString}`);
+                    } else {
+                        nextRunLabel.set_text('Next run: Not scheduled');
+                    }
+                }),
+                'changed::pixel-refresh-next-run'
+            );
+            
+        } catch (error) {
+            _logError(error, 'buildStatusIndicator', this.#settings);
+            throw error;
+        }
+    }
+    
+    /**
+     * Track a signal connection for later cleanup
+     * @param {object} object - The object the signal is connected to
+     * @param {number} id - The signal connection ID 
+     * @param {string} name - The signal name
+     * @private
+     */
+    #trackSignal(object, id, name) {
+        // Use logical assignment operator to initialize array if needed
+        this.#signalIds ??= [];
+        this.#signalIds.push({ object, id, name });
+    }
+    
+    /**
+     * Create the manual control buttons UI component
+     * @param {Adw.PreferencesGroup} group - The group to add the component to
+     * @private
+     */
+    #buildManualControls(group) {
+        try {
             const manualControlRow = new Adw.ActionRow({
                 title: 'Manual Control',
                 subtitle: 'Run or cancel pixel refresh manually'
@@ -597,37 +736,152 @@ export default class OledCarePreferences extends ExtensionPreferences {
             const runButton = new Gtk.Button({
                 label: 'Run Now',
                 css_classes: ['suggested-action'],
-                sensitive: !settings.get_boolean('pixel-refresh-running')
+                sensitive: !this.#settings.get_boolean('pixel-refresh-running')
             });
 
             const cancelButton = new Gtk.Button({
                 label: 'Cancel',
                 css_classes: ['destructive-action'],
-                sensitive: settings.get_boolean('pixel-refresh-running')
+                sensitive: this.#settings.get_boolean('pixel-refresh-running')
             });
 
-            runButton.connect('clicked', () => {
-                settings.set_boolean('pixel-refresh-manual-trigger', true);
-            });
+            // Using arrow functions and tracking signals
+            this.#trackSignal(
+                runButton, 
+                runButton.connect('clicked', () => {
+                    this.#settings.set_boolean('pixel-refresh-manual-trigger', true);
+                }),
+                'clicked'
+            );
 
-            cancelButton.connect('clicked', () => {
-                settings.set_boolean('pixel-refresh-manual-cancel', true);
-            });
+            this.#trackSignal(
+                cancelButton,
+                cancelButton.connect('clicked', () => {
+                    this.#settings.set_boolean('pixel-refresh-manual-cancel', true);
+                }),
+                'clicked'
+            );
 
             buttonBox.append(runButton);
             buttonBox.append(cancelButton);
             manualControlRow.add_suffix(buttonBox);
-            refreshGroup.add(manualControlRow);
-
+            group.add(manualControlRow);
+            
+            // Update button sensitivity when running state changes
+            this.#trackSignal(
+                this.#settings,
+                this.#settings.connect('changed::pixel-refresh-running', () => {
+                    const running = this.#settings.get_boolean('pixel-refresh-running');
+                    runButton.set_sensitive(!running);
+                    cancelButton.set_sensitive(running);
+                }),
+                'changed::pixel-refresh-running'
+            );
+            
         } catch (error) {
-            _logError(error);
-            // In test environment, return window even if there's an error
-            if (isTestEnv) {
-                return window;
-            }
+            _logError(error, 'buildManualControls', this.#settings);
+            throw error;
         }
     }
-
-    // Using parent class's getSettings() method which correctly uses the extension metadata
-    // to determine the schema ID
+    
+    /**
+     * Helper function to create a switch row
+     * @param {Object} options - Options object
+     * @param {string} options.title - The row title
+     * @param {string} options.subtitle - The row subtitle
+     * @param {string} options.settingsKey - The settings key to bind to
+     * @returns {Adw.ActionRow} The created row
+     * @private
+     */
+    #createSwitchRow({ title, subtitle, settingsKey }) {
+        const row = new Adw.ActionRow({
+            title,
+            subtitle
+        });
+        
+        const switchWidget = new Gtk.Switch({
+            active: this.#settings.get_boolean(settingsKey),
+            valign: Gtk.Align.CENTER
+        });
+        
+        row.add_suffix(switchWidget);
+        
+        this.#settings.bind(
+            settingsKey,
+            switchWidget,
+            'active',
+            Gio.SettingsBindFlags.DEFAULT
+        );
+        
+        return row;
+    }
+    
+    /**
+     * Helper function to create a spin button row
+     * @param {Object} options - Options object
+     * @param {string} options.title - The row title
+     * @param {string} options.subtitle - The row subtitle
+     * @param {string} options.settingsKey - The settings key to bind to
+     * @param {number} options.min - Minimum value
+     * @param {number} options.max - Maximum value
+     * @param {number} options.step - Step increment
+     * @param {number} options.pageStep - Page increment
+     * @returns {Adw.ActionRow} The created row
+     * @private
+     */
+    #createSpinButtonRow({ title, subtitle, settingsKey, min, max, step, pageStep }) {
+        const row = new Adw.ActionRow({
+            title,
+            subtitle
+        });
+        
+        const adjustment = new Gtk.Adjustment({
+            lower: min,
+            upper: max,
+            step_increment: step,
+            page_increment: pageStep,
+            value: this.#settings.get_int(settingsKey)
+        });
+        
+        const spinButton = new Gtk.SpinButton({
+            adjustment,
+            climb_rate: 1,
+            digits: 0,
+            numeric: true,
+            valign: Gtk.Align.CENTER
+        });
+        
+        row.add_suffix(spinButton);
+        
+        this.#settings.bind(
+            settingsKey,
+            spinButton,
+            'value',
+            Gio.SettingsBindFlags.DEFAULT
+        );
+        
+        return row;
+    }
+    
+    /**
+     * Clean up resources when the preferences dialog is closed
+     */
+    destroy() {
+        // Disconnect all tracked signals
+        for (const signal of this.#signalIds ?? []) {
+            // Use optional chaining to safely access properties
+            signal?.object?.disconnect?.(signal.id);
+        }
+        
+        // Clear arrays
+        this.#signalIds = [];
+        
+        // Clear references
+        this.#settings = null;
+        
+        // Call parent method if it exists
+        if (super.destroy) {
+            super.destroy();
+        }
+    }
 } 

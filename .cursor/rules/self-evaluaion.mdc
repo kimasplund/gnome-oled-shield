@@ -1,0 +1,14 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+-Always use cogito tools extensively at every step.
+-refractor to smaller files if possible and prudent.
+-upgrade and take full advantage of ES2021+ features.
+-make sure to check if changes made affect other files or functions that needs updating or fixing also.
+-After each file edit ealuate your work from 0.0 - 1.0
+-to long files brings score down.
+-if score is under 0.9 use cogito tools extensively to improve untill score is above 0.9 and as close to 1.0 as possible.
+-implement reccomendations.
+-create and un tests for everything.
