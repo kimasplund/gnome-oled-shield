@@ -41,7 +41,7 @@ import {
 export default class OledCareExtension extends BaseExtension {
     // Static initialization block for constants and configuration
     static {
-        this.EXTENSION_ID = 'oled-care@kimasplund.online';
+        this.EXTENSION_ID = 'oled-care@asplund.kim';
         this.EXTENSION_NAME = 'OLED Care';
         this.DEBUG_MODE_KEY = 'debug-mode';
         this.SCREEN_DIM_ENABLED_KEY = 'screen-dim-enabled';
@@ -502,7 +502,8 @@ export default class OledCareExtension extends BaseExtension {
                 displayManager: this.#displayManager,
                 pixelShift: this.#pixelShift,
                 pixelRefresh: this.#pixelRefresh,
-                dimming: this.#dimming
+                dimming: this.#dimming,
+                openPreferences: () => this.openPreferences()
             });
             
             // Set initial status

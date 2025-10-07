@@ -56,3 +56,13 @@ yarn-error.log*
 /coverage/ 
 dist/
 .mcp/
+
+**/.claude/settings.local.json
+
+.claude/
+.cursor/
+.integrated-reasoning/
+.mcp/
+.cursorrules
+CLAUDE.md
+FIXES_APPLIED.md

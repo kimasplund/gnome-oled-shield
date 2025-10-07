@@ -1,0 +1,32 @@
+{
+  "name": "gnome-oled-shield",
+  "version": "1.0.0",
+  "description": "An advanced GNOME extension to protect OLED displays from burn-in using various protection techniques.",
+  "main": "extension.js",
+  "directories": {
+    "lib": "lib",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "node --experimental-vm-modules node_modules/jasmine/bin/jasmine",
+    "test:resource": "npm test tests/unit/test-resourceManager.js",
+    "test:signal": "npm test tests/unit/test-signalManager.js",
+    "test:error": "npm test tests/unit/test-error-system.js",
+    "test:all": "./tests/run-node-tests.sh"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kimasplund/gnome-oled-shield.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/kimasplund/gnome-oled-shield/issues"
+  },
+  "homepage": "https://github.com/kimasplund/gnome-oled-shield#readme",
+  "devDependencies": {
+    "jasmine": "^5.7.1"
+  }
+}

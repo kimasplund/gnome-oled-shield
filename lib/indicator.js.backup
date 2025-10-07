@@ -83,21 +83,21 @@ export default class OledCareIndicator extends PanelMenu.Button {
     }
 
     // Private fields using true private syntax
-    _openPreferencesCallback = null;
-    _settings = null;
-    _sessionMode = null;
-    _menuItems = {};
-    _displayManager = null;
-    _pixelShift = null;
-    _dimming = null;
-    _pixelRefresh = null;
-    _notificationSource = null;
-    _sessionModeChangedId = null;
-    _debug = null;
-    _resourceManager = null;
-    _signalManager = null;
-    _settingsConnections = [];
-    _abortController = new AbortController();
+    #openPreferencesCallback;
+    #settings;
+    #sessionMode;
+    #menuItems = {};
+    #displayManager;
+    #pixelShift;
+    #dimming;
+    #pixelRefresh;
+    #notificationSource;
+    #sessionModeChangedId = null;
+    #debug;
+    #resourceManager;
+    #signalManager;
+    #settingsConnections = [];
+    #abortController = new AbortController();
 
     /**
      * Constructor for the OledCareIndicator component
@@ -109,68 +109,68 @@ export default class OledCareIndicator extends PanelMenu.Button {
      * @param {Dimming} components.dimming - Dimming instance
      * @param {Function} components.openPreferences - Callback to open preferences
      */
-    _init(settings, components = {}) {
-        super._init(0.0, 'OLED Care Indicator');
+    constructor(settings, components = {}) {
+        super(0.0, 'OLED Care Indicator');
 
         try {
-            this._settings = settings;
-            this._sessionMode = Main.sessionMode;
+            this.#settings = settings;
+            this.#sessionMode = Main.sessionMode;
 
             // Store pre-initialized components if provided
-            this._displayManager = components.displayManager;
-            this._pixelShift = components.pixelShift;
-            this._pixelRefresh = components.pixelRefresh;
-            this._dimming = components.dimming;
+            this.#displayManager = components.displayManager;
+            this.#pixelShift = components.pixelShift;
+            this.#pixelRefresh = components.pixelRefresh;
+            this.#dimming = components.dimming;
 
             // Store openPreferences callback
-            this._openPreferencesCallback = components.openPreferences;
+            this.#openPreferencesCallback = components.openPreferences;
             
             // Initialize debug mode based on settings
-            const debugMode = this._settings?.get_boolean(CONSTANTS.SETTINGS.DEBUG_MODE) ?? false;
-            this._debug = debugMode ? this._logDebug.bind(this) : () => {};
+            const debugMode = this.#settings?.get_boolean(CONSTANTS.SETTINGS.DEBUG_MODE) ?? false;
+            this.#debug = debugMode ? this.#logDebug.bind(this) : () => {};
             
             // Start tracking performance
             metrics.setEnabled(debugMode);
             
             // Set up resource and signal managers
-            this._resourceManager = new ResourceManager(this._debug);
-            this._signalManager = new SignalManager(this._debug);
+            this.#resourceManager = new ResourceManager(this.#debug);
+            this.#signalManager = new SignalManager(this.#debug);
             
             // Validate required settings
-            this._validateSettings();
+            this.#validateSettings();
             
             // Initialize component managers with dependency injection
-            this._initializeComponents();
+            this.#initializeComponents();
             
             // Create notification source for system notifications
-            this._createNotificationSource();
+            this.#createNotificationSource();
             
             // Create panel UI
-            this._createPanelIcon();
+            this.#createPanelIcon();
             
             // Build menu and bind settings
             try {
-                this._buildMenu();
-                this._bindSettings();
+                this.#buildMenu();
+                this.#bindSettings();
             } catch (error) {
-                this._debug(`Error building menu: ${error.message}`);
-                this._showNotification('Error', 'Failed to build extension menu');
+                this.#debug(`Error building menu: ${error.message}`);
+                this.#showNotification('Error', 'Failed to build extension menu');
                 throw IndicatorError.operationFailed('build_menu', error);
             }
             
             // Initialize features
-            this._debug('Initializing features...');
-            this._initializeFeatures();
+            this.#debug('Initializing features...');
+            this.#initializeFeatures();
             
             // Connect to session mode changes
-            this._connectSessionModeSignal();
+            this.#connectSessionModeSignal();
             
             // Show welcome notification only in user mode
-            if (this._sessionMode.currentMode === 'user') {
-                this._showNotification('OLED Care Active', 'Protecting your OLED display');
+            if (this.#sessionMode.currentMode === 'user') {
+                this.#showNotification('OLED Care Active', 'Protecting your OLED display');
             }
             
-            this._debug('Indicator initialization complete');
+            this.#debug('Indicator initialization complete');
         } catch (error) {
             console.error(`[OLED Care] [Indicator] Construction error: ${error.message}`);
             throw error;
@@ -182,7 +182,7 @@ export default class OledCareIndicator extends PanelMenu.Button {
      * @param {string} message - Message to log
      * @private
      */
-    _logDebug(message) {
+    #logDebug(message) {
         console.log(`[OLED Care] [Indicator] ${message}`);
         
         // Track debug message in metrics
@@ -194,20 +194,20 @@ export default class OledCareIndicator extends PanelMenu.Button {
      * @private
      * @throws {IndicatorError} If settings validation fails
      */
-    _validateSettings() {
+    #validateSettings() {
         try {
-            if (!this._settings) {
+            if (!this.#settings) {
                 throw new IndicatorError('Settings object is null or undefined', {
                     context: 'validation'
                 });
             }
             
-            const schemas = this._settings.list_keys();
+            const schemas = this.#settings.list_keys();
             
             // Check for required settings
             for (const setting of OledCareIndicator.REQUIRED_SETTINGS) {
                 if (!schemas.includes(setting)) {
-                    this._debug(`Warning: Required setting '${setting}' not found in schema`);
+                    this.#debug(`Warning: Required setting '${setting}' not found in schema`);
                 }
             }
         } catch (error) {
@@ -226,40 +226,40 @@ export default class OledCareIndicator extends PanelMenu.Button {
      * Initialize component managers
      * @private
      */
-    _initializeComponents() {
+    #initializeComponents() {
         const timer = metrics.startTimer('init_components');
 
         try {
             // Only create components if they weren't provided to constructor
-            if (!this._displayManager) {
-                this._displayManager = new DisplayManager(this._settings);
+            if (!this.#displayManager) {
+                this.#displayManager = new DisplayManager(this.#settings);
             }
-            if (!this._pixelShift) {
-                this._pixelShift = new PixelShift(this._settings);
+            if (!this.#pixelShift) {
+                this.#pixelShift = new PixelShift(this.#settings);
             }
-            if (!this._dimming) {
-                this._dimming = new Dimming(this._settings);
+            if (!this.#dimming) {
+                this.#dimming = new Dimming(this.#settings);
             }
-            if (!this._pixelRefresh) {
-                this._pixelRefresh = new PixelRefresh(this._settings);
+            if (!this.#pixelRefresh) {
+                this.#pixelRefresh = new PixelRefresh(this.#settings);
             }
 
             // Inject dependencies
-            this._displayManager.setResourceManager?.(this._resourceManager);
-            this._displayManager.setSignalManager?.(this._signalManager);
-            this._pixelShift.setResourceManager?.(this._resourceManager);
-            this._pixelShift.setSignalManager?.(this._signalManager);
-            this._dimming.setResourceManager?.(this._resourceManager);
-            this._dimming.setSignalManager?.(this._signalManager);
-            this._pixelRefresh.setResourceManager?.(this._resourceManager);
-            this._pixelRefresh.setSignalManager?.(this._signalManager);
+            this.#displayManager.setResourceManager?.(this.#resourceManager);
+            this.#displayManager.setSignalManager?.(this.#signalManager);
+            this.#pixelShift.setResourceManager?.(this.#resourceManager);
+            this.#pixelShift.setSignalManager?.(this.#signalManager);
+            this.#dimming.setResourceManager?.(this.#resourceManager);
+            this.#dimming.setSignalManager?.(this.#signalManager);
+            this.#pixelRefresh.setResourceManager?.(this.#resourceManager);
+            this.#pixelRefresh.setSignalManager?.(this.#signalManager);
 
             timer.stop();
         } catch (error) {
             timer.addLabels({ error: true });
             timer.stop();
 
-            this._debug(`Error initializing components: ${error.message}`);
+            this.#debug(`Error initializing components: ${error.message}`);
             throw IndicatorError.operationFailed('init_components', error);
         }
     }
@@ -268,15 +268,15 @@ export default class OledCareIndicator extends PanelMenu.Button {
      * Create notification source for system notifications
      * @private
      */
-    _createNotificationSource() {
+    #createNotificationSource() {
         try {
-            this._notificationSource = new MessageTray.Source({
+            this.#notificationSource = new MessageTray.Source({
                 title: 'OLED Care',
                 iconName: 'oled-care-symbolic'
             });
-            Main.messageTray.add(this._notificationSource);
+            Main.messageTray.add(this.#notificationSource);
         } catch (error) {
-            this._debug(`Error creating notification source: ${error.message}`);
+            this.#debug(`Error creating notification source: ${error.message}`);
             // Non-critical error, can continue without notifications
         }
     }
@@ -285,7 +285,7 @@ export default class OledCareIndicator extends PanelMenu.Button {
      * Create the panel icon
      * @private
      */
-    _createPanelIcon() {
+    #createPanelIcon() {
         try {
             const icon = new St.Icon({
                 icon_name: 'oled-care-symbolic',
@@ -293,7 +293,7 @@ export default class OledCareIndicator extends PanelMenu.Button {
             });
             this.add_child(icon);
         } catch (error) {
-            this._debug(`Error creating panel icon: ${error.message}`);
+            this.#debug(`Error creating panel icon: ${error.message}`);
             throw IndicatorError.operationFailed('create_panel_icon', error);
         }
     }
@@ -302,23 +302,23 @@ export default class OledCareIndicator extends PanelMenu.Button {
      * Initialize all feature components
      * @private
      */
-    _initializeFeatures() {
+    #initializeFeatures() {
         const timer = metrics.startTimer('init_features');
         
         try {
-            this._displayManager.init();
-            this._pixelShift.init();
-            this._dimming.init();
-            this._pixelRefresh.init();
+            this.#displayManager.init();
+            this.#pixelShift.init();
+            this.#dimming.init();
+            this.#pixelRefresh.init();
             
-            this._debug('Features initialized');
+            this.#debug('Features initialized');
             timer.stop();
         } catch (error) {
             timer.addLabels({ error: true });
             timer.stop();
             
-            this._debug(`Error initializing features: ${error.message}`);
-            this._showNotification('Error', 'Failed to initialize some features');
+            this.#debug(`Error initializing features: ${error.message}`);
+            this.#showNotification('Error', 'Failed to initialize some features');
             
             throw IndicatorError.operationFailed('init_features', error);
         }
@@ -328,18 +328,18 @@ export default class OledCareIndicator extends PanelMenu.Button {
      * Connect to session mode changes
      * @private
      */
-    _connectSessionModeSignal() {
+    #connectSessionModeSignal() {
         try {
-            if (this._sessionMode) {
-                this._sessionModeChangedId = this._signalManager.connect(
-                    this._sessionMode,
+            if (this.#sessionMode) {
+                this.#sessionModeChangedId = this.#signalManager.connect(
+                    this.#sessionMode,
                     'updated',
-                    this._onSessionModeChanged.bind(this),
+                    this.#onSessionModeChanged.bind(this),
                     'session-mode-changed'
                 );
             }
         } catch (error) {
-            this._debug(`Error connecting to session mode signal: ${error.message}`);
+            this.#debug(`Error connecting to session mode signal: ${error.message}`);
             // Non-critical error, can continue without session mode handling
         }
     }
@@ -348,22 +348,22 @@ export default class OledCareIndicator extends PanelMenu.Button {
      * Handle session mode changes
      * @private
      */
-    _onSessionModeChanged() {
+    #onSessionModeChanged() {
         const timer = metrics.startTimer('session_mode_changed');
         
         try {
-            const mode = this._sessionMode.currentMode;
-            this._debug(`Session mode changed to: ${mode}`);
+            const mode = this.#sessionMode.currentMode;
+            this.#debug(`Session mode changed to: ${mode}`);
             
             switch (mode) {
                 case 'user':
-                    this._enableFullFunctionality();
+                    this.#enableFullFunctionality();
                     break;
                 case 'unlock-dialog':
-                    this._enableLimitedFunctionality();
+                    this.#enableLimitedFunctionality();
                     break;
                 default:
-                    this._disableFeatures();
+                    this.#disableFeatures();
                     break;
             }
             
@@ -372,7 +372,7 @@ export default class OledCareIndicator extends PanelMenu.Button {
             timer.addLabels({ error: true });
             timer.stop();
             
-            this._debug(`Error handling session mode change: ${error.message}`);
+            this.#debug(`Error handling session mode change: ${error.message}`);
         }
     }
 
@@ -380,24 +380,24 @@ export default class OledCareIndicator extends PanelMenu.Button {
      * Enable full functionality in normal user mode
      * @private
      */
-    _enableFullFunctionality() {
+    #enableFullFunctionality() {
         const timer = metrics.startTimer('enable_full_functionality');
         
         try {
-            this._debug('Enabling full functionality');
+            this.#debug('Enabling full functionality');
             this.show();
             this.menu.enable();
-            this._displayManager.enable();
-            this._pixelShift.enable();
-            this._dimming.enable();
-            this._pixelRefresh.enable();
+            this.#displayManager.enable();
+            this.#pixelShift.enable();
+            this.#dimming.enable();
+            this.#pixelRefresh.enable();
             
             timer.stop();
         } catch (error) {
             timer.addLabels({ error: true });
             timer.stop();
             
-            this._debug(`Error enabling full functionality: ${error.message}`);
+            this.#debug(`Error enabling full functionality: ${error.message}`);
         }
     }
 
@@ -405,24 +405,24 @@ export default class OledCareIndicator extends PanelMenu.Button {
      * Enable limited functionality in lock screen mode
      * @private
      */
-    _enableLimitedFunctionality() {
+    #enableLimitedFunctionality() {
         const timer = metrics.startTimer('enable_limited_functionality');
         
         try {
-            this._debug('Enabling limited functionality');
+            this.#debug('Enabling limited functionality');
             this.hide();
             this.menu.disable();
-            this._displayManager.enableLimited();
-            this._pixelShift.enable();
-            this._dimming.enableLimited();
-            this._pixelRefresh.disable();
+            this.#displayManager.enableLimited();
+            this.#pixelShift.enable();
+            this.#dimming.enableLimited();
+            this.#pixelRefresh.disable();
             
             timer.stop();
         } catch (error) {
             timer.addLabels({ error: true });
             timer.stop();
             
-            this._debug(`Error enabling limited functionality: ${error.message}`);
+            this.#debug(`Error enabling limited functionality: ${error.message}`);
         }
     }
 
@@ -430,24 +430,24 @@ export default class OledCareIndicator extends PanelMenu.Button {
      * Disable all features
      * @private
      */
-    _disableFeatures() {
+    #disableFeatures() {
         const timer = metrics.startTimer('disable_features');
         
         try {
-            this._debug('Disabling all features');
+            this.#debug('Disabling all features');
             this.hide();
             this.menu.disable();
-            this._displayManager.disable();
-            this._pixelShift.disable();
-            this._dimming.disable();
-            this._pixelRefresh.disable();
+            this.#displayManager.disable();
+            this.#pixelShift.disable();
+            this.#dimming.disable();
+            this.#pixelRefresh.disable();
             
             timer.stop();
         } catch (error) {
             timer.addLabels({ error: true });
             timer.stop();
             
-            this._debug(`Error disabling features: ${error.message}`);
+            this.#debug(`Error disabling features: ${error.message}`);
         }
     }
 
@@ -455,11 +455,11 @@ export default class OledCareIndicator extends PanelMenu.Button {
      * Build the indicator menu
      * @private
      */
-    _buildMenu() {
+    #buildMenu() {
         const timer = metrics.startTimer('build_menu');
         
         try {
-            this._debug('Building menu');
+            this.#debug('Building menu');
             
             // Header
             const headerItem = new PopupMenu.PopupMenuItem('OLED Care', { 
@@ -475,10 +475,10 @@ export default class OledCareIndicator extends PanelMenu.Button {
             const displayItem = new PopupMenu.PopupMenuItem('Select Displays');
             displayItem.connect('activate', () => {
                 try {
-                    this._displayManager.showDisplaySelector();
+                    this.#displayManager.showDisplaySelector();
                 } catch (error) {
-                    this._debug(`Failed to show display selector: ${error.message}`);
-                    this._showNotification('Failed to show display selector', 'error');
+                    this.#debug(`Failed to show display selector: ${error.message}`);
+                    this.#showNotification('Failed to show display selector', 'error');
                 }
             });
             this.menu.addMenuItem(displayItem);
@@ -487,54 +487,54 @@ export default class OledCareIndicator extends PanelMenu.Button {
             this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
             
             // Pixel Shift toggle
-            this._menuItems.pixelShift = new PopupMenu.PopupSwitchMenuItem('Pixel Shift');
-            this._menuItems.pixelShift.setToggleState(
-                this._settings.get_boolean(CONSTANTS.SETTINGS.PIXEL_SHIFT_ENABLED)
+            this.#menuItems.pixelShift = new PopupMenu.PopupSwitchMenuItem('Pixel Shift');
+            this.#menuItems.pixelShift.setToggleState(
+                this.#settings.get_boolean(CONSTANTS.SETTINGS.PIXEL_SHIFT_ENABLED)
             );
-            this._menuItems.pixelShift.connect('toggled', (item) => {
-                this._settings.set_boolean(CONSTANTS.SETTINGS.PIXEL_SHIFT_ENABLED, item.state);
+            this.#menuItems.pixelShift.connect('toggled', (item) => {
+                this.#settings.set_boolean(CONSTANTS.SETTINGS.PIXEL_SHIFT_ENABLED, item.state);
             });
-            this.menu.addMenuItem(this._menuItems.pixelShift);
+            this.menu.addMenuItem(this.#menuItems.pixelShift);
             
             // Screen Dimming toggle
-            this._menuItems.screenDim = new PopupMenu.PopupSwitchMenuItem('Screen Dimming');
-            this._menuItems.screenDim.setToggleState(
-                this._settings.get_boolean(CONSTANTS.SETTINGS.SCREEN_DIM_ENABLED)
+            this.#menuItems.screenDim = new PopupMenu.PopupSwitchMenuItem('Screen Dimming');
+            this.#menuItems.screenDim.setToggleState(
+                this.#settings.get_boolean(CONSTANTS.SETTINGS.SCREEN_DIM_ENABLED)
             );
-            this._menuItems.screenDim.connect('toggled', (item) => {
-                this._settings.set_boolean(CONSTANTS.SETTINGS.SCREEN_DIM_ENABLED, item.state);
+            this.#menuItems.screenDim.connect('toggled', (item) => {
+                this.#settings.set_boolean(CONSTANTS.SETTINGS.SCREEN_DIM_ENABLED, item.state);
             });
-            this.menu.addMenuItem(this._menuItems.screenDim);
+            this.menu.addMenuItem(this.#menuItems.screenDim);
             
             // Window Dimming toggle
-            this._menuItems.windowDim = new PopupMenu.PopupSwitchMenuItem('Window Dimming');
-            this._menuItems.windowDim.setToggleState(
-                this._settings.get_boolean(CONSTANTS.SETTINGS.UNFOCUS_DIM_ENABLED)
+            this.#menuItems.windowDim = new PopupMenu.PopupSwitchMenuItem('Window Dimming');
+            this.#menuItems.windowDim.setToggleState(
+                this.#settings.get_boolean(CONSTANTS.SETTINGS.UNFOCUS_DIM_ENABLED)
             );
-            this._menuItems.windowDim.connect('toggled', (item) => {
-                this._settings.set_boolean(CONSTANTS.SETTINGS.UNFOCUS_DIM_ENABLED, item.state);
+            this.#menuItems.windowDim.connect('toggled', (item) => {
+                this.#settings.set_boolean(CONSTANTS.SETTINGS.UNFOCUS_DIM_ENABLED, item.state);
             });
-            this.menu.addMenuItem(this._menuItems.windowDim);
+            this.menu.addMenuItem(this.#menuItems.windowDim);
             
             // Pixel Refresh toggle
-            this._menuItems.pixelRefresh = new PopupMenu.PopupSwitchMenuItem('Pixel Refresh');
-            this._menuItems.pixelRefresh.setToggleState(
-                this._settings.get_boolean(CONSTANTS.SETTINGS.PIXEL_REFRESH_ENABLED)
+            this.#menuItems.pixelRefresh = new PopupMenu.PopupSwitchMenuItem('Pixel Refresh');
+            this.#menuItems.pixelRefresh.setToggleState(
+                this.#settings.get_boolean(CONSTANTS.SETTINGS.PIXEL_REFRESH_ENABLED)
             );
-            this._menuItems.pixelRefresh.connect('toggled', (item) => {
-                this._settings.set_boolean(CONSTANTS.SETTINGS.PIXEL_REFRESH_ENABLED, item.state);
+            this.#menuItems.pixelRefresh.connect('toggled', (item) => {
+                this.#settings.set_boolean(CONSTANTS.SETTINGS.PIXEL_REFRESH_ENABLED, item.state);
             });
-            this.menu.addMenuItem(this._menuItems.pixelRefresh);
+            this.menu.addMenuItem(this.#menuItems.pixelRefresh);
             
             // Manual Pixel Refresh
-            this._menuItems.manualRefresh = new PopupMenu.PopupMenuItem('Run Pixel Refresh Now');
-            this._menuItems.manualRefresh.setSensitive(
-                !this._settings.get_boolean(CONSTANTS.SETTINGS.PIXEL_REFRESH_RUNNING)
+            this.#menuItems.manualRefresh = new PopupMenu.PopupMenuItem('Run Pixel Refresh Now');
+            this.#menuItems.manualRefresh.setSensitive(
+                !this.#settings.get_boolean(CONSTANTS.SETTINGS.PIXEL_REFRESH_RUNNING)
             );
-            this._menuItems.manualRefresh.connect('activate', () => {
-                this._pixelRefresh.runManualRefresh();
+            this.#menuItems.manualRefresh.connect('activate', () => {
+                this.#pixelRefresh.runManualRefresh();
             });
-            this.menu.addMenuItem(this._menuItems.manualRefresh);
+            this.menu.addMenuItem(this.#menuItems.manualRefresh);
             
             // Separator
             this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
@@ -544,24 +544,24 @@ export default class OledCareIndicator extends PanelMenu.Button {
             settingsItem.connect('activate', () => {
                 try {
                     // Call the openPreferences callback if provided
-                    if (this._openPreferencesCallback) {
-                        this._openPreferencesCallback();
+                    if (this.#openPreferencesCallback) {
+                        this.#openPreferencesCallback();
                     } else {
-                        this._debug('No openPreferences callback provided');
+                        this.#debug('No openPreferences callback provided');
                     }
                 } catch (error) {
-                    this._debug(`Error opening preferences: ${error.message}`);
+                    this.#debug(`Error opening preferences: ${error.message}`);
                 }
             });
             this.menu.addMenuItem(settingsItem);
             
-            this._debug('Menu built');
+            this.#debug('Menu built');
             timer.stop();
         } catch (error) {
             timer.addLabels({ error: true });
             timer.stop();
             
-            this._debug(`Error building menu: ${error.message}`);
+            this.#debug(`Error building menu: ${error.message}`);
             throw IndicatorError.operationFailed('build_menu', error);
         }
     }
@@ -570,71 +570,71 @@ export default class OledCareIndicator extends PanelMenu.Button {
      * Bind settings to update UI and components
      * @private
      */
-    _bindSettings() {
+    #bindSettings() {
         const timer = metrics.startTimer('bind_settings');
         
         try {
-            this._debug('Binding settings');
+            this.#debug('Binding settings');
             
             // Bind pixel shift settings
-            this._connectSetting(
+            this.#connectSetting(
                 CONSTANTS.SETTINGS.PIXEL_SHIFT_ENABLED,
                 (value) => {
-                    if (this._menuItems.pixelShift) {
-                        this._menuItems.pixelShift.setToggleState(value);
+                    if (this.#menuItems.pixelShift) {
+                        this.#menuItems.pixelShift.setToggleState(value);
                     }
                 }
             );
             
             // Bind dimming settings
-            this._connectSetting(
+            this.#connectSetting(
                 CONSTANTS.SETTINGS.SCREEN_DIM_ENABLED,
                 (value) => {
-                    if (this._menuItems.screenDim) {
-                        this._menuItems.screenDim.setToggleState(value);
+                    if (this.#menuItems.screenDim) {
+                        this.#menuItems.screenDim.setToggleState(value);
                     }
                 }
             );
             
-            this._connectSetting(
+            this.#connectSetting(
                 CONSTANTS.SETTINGS.UNFOCUS_DIM_ENABLED,
                 (value) => {
-                    if (this._menuItems.windowDim) {
-                        this._menuItems.windowDim.setToggleState(value);
+                    if (this.#menuItems.windowDim) {
+                        this.#menuItems.windowDim.setToggleState(value);
                     }
                 }
             );
             
             // Bind pixel refresh settings
-            this._connectSetting(
+            this.#connectSetting(
                 CONSTANTS.SETTINGS.PIXEL_REFRESH_ENABLED,
                 (value) => {
-                    if (this._menuItems.pixelRefresh) {
-                        this._menuItems.pixelRefresh.setToggleState(value);
+                    if (this.#menuItems.pixelRefresh) {
+                        this.#menuItems.pixelRefresh.setToggleState(value);
                     }
                 }
             );
             
             // Update manual refresh item sensitivity based on pixel refresh running state
-            this._connectSetting(
+            this.#connectSetting(
                 CONSTANTS.SETTINGS.PIXEL_REFRESH_RUNNING,
                 (value) => {
-                    if (this._menuItems.manualRefresh) {
-                        this._menuItems.manualRefresh.setSensitive(!value);
+                    if (this.#menuItems.manualRefresh) {
+                        this.#menuItems.manualRefresh.setSensitive(!value);
                     }
                 }
             );
             
             // Bind component properties directly using GSettings bind
-            this._bindComponentProperties();
+            this.#bindComponentProperties();
             
-            this._debug('Settings bound');
+            this.#debug('Settings bound');
             timer.stop();
         } catch (error) {
             timer.addLabels({ error: true });
             timer.stop();
             
-            this._debug(`Error binding settings: ${error.message}`);
+            this.#debug(`Error binding settings: ${error.message}`);
             throw IndicatorError.operationFailed('bind_settings', error);
         }
     }
@@ -645,20 +645,20 @@ export default class OledCareIndicator extends PanelMenu.Button {
      * @param {function} callback - Function to call when setting changes
      * @private
      */
-    _connectSetting(settingKey, callback) {
-        if (!this._signalManager || !this._settings) return;
+    #connectSetting(settingKey, callback) {
+        if (!this.#signalManager || !this.#settings) return;
         
-        const id = this._signalManager.connect(
-            this._settings,
+        const id = this.#signalManager.connect(
+            this.#settings,
             `changed::${settingKey}`,
             () => {
-                const value = this._getSettingValue(settingKey);
+                const value = this.#getSettingValue(settingKey);
                 callback(value);
             },
             `setting-${settingKey}`
         );
         
-        this._settingsConnections.push(id);
+        this.#settingsConnections.push(id);
     }
     
     /**
@@ -667,24 +667,24 @@ export default class OledCareIndicator extends PanelMenu.Button {
      * @returns {any} The setting value
      * @private
      */
-    _getSettingValue(settingKey) {
-        if (!this._settings) return null;
+    #getSettingValue(settingKey) {
+        if (!this.#settings) return null;
         
         // Determine setting type and get value accordingly
         if (settingKey.includes('enabled')) {
-            return this._settings.get_boolean(settingKey);
+            return this.#settings.get_boolean(settingKey);
         } else if (settingKey.includes('interval') || 
                   settingKey.includes('level') || 
                   settingKey.includes('timeout') ||
                   settingKey.includes('speed') ||
                   settingKey.includes('progress') ||
                   settingKey.includes('remaining')) {
-            return this._settings.get_int(settingKey);
+            return this.#settings.get_int(settingKey);
         } else if (settingKey.includes('schedule')) {
-            return this._settings.get_strv(settingKey);
+            return this.#settings.get_strv(settingKey);
         } else {
             // Default to boolean for unknown types
-            return this._settings.get_boolean(settingKey);
+            return this.#settings.get_boolean(settingKey);
         }
     }
     
@@ -692,30 +692,30 @@ export default class OledCareIndicator extends PanelMenu.Button {
      * Bind component properties directly using GSettings
      * @private
      */
-    _bindComponentProperties() {
+    #bindComponentProperties() {
         // Direct property bindings for GObject-based components
         const bindings = [
             // PixelShift bindings
-            [CONSTANTS.SETTINGS.PIXEL_SHIFT_INTERVAL, this._pixelShift, 'interval'],
+            [CONSTANTS.SETTINGS.PIXEL_SHIFT_INTERVAL, this.#pixelShift, 'interval'],
             
             // Dimming bindings
-            [CONSTANTS.SETTINGS.DIMMING_LEVEL, this._dimming, 'level'],
-            [CONSTANTS.SETTINGS.SCREEN_DIM_TIMEOUT, this._dimming, 'timeout'],
-            [CONSTANTS.SETTINGS.UNFOCUS_DIM_LEVEL, this._dimming, 'unfocusLevel'],
+            [CONSTANTS.SETTINGS.DIMMING_LEVEL, this.#dimming, 'level'],
+            [CONSTANTS.SETTINGS.SCREEN_DIM_TIMEOUT, this.#dimming, 'timeout'],
+            [CONSTANTS.SETTINGS.UNFOCUS_DIM_LEVEL, this.#dimming, 'unfocusLevel'],
             
             // PixelRefresh bindings
-            [CONSTANTS.SETTINGS.PIXEL_REFRESH_SPEED, this._pixelRefresh, 'speed'],
-            [CONSTANTS.SETTINGS.PIXEL_REFRESH_SMART, this._pixelRefresh, 'smart'],
-            [CONSTANTS.SETTINGS.PIXEL_REFRESH_SCHEDULE, this._pixelRefresh, 'schedule'],
+            [CONSTANTS.SETTINGS.PIXEL_REFRESH_SPEED, this.#pixelRefresh, 'speed'],
+            [CONSTANTS.SETTINGS.PIXEL_REFRESH_SMART, this.#pixelRefresh, 'smart'],
+            [CONSTANTS.SETTINGS.PIXEL_REFRESH_SCHEDULE, this.#pixelRefresh, 'schedule'],
             
             // DisplayManager bindings
-            [CONSTANTS.SETTINGS.ENABLED_DISPLAYS, this._displayManager, 'enabledDisplays']
+            [CONSTANTS.SETTINGS.ENABLED_DISPLAYS, this.#displayManager, 'enabledDisplays']
         ];
         
         // Bind each property if target component has the property
         for (const [settingKey, target, property] of bindings) {
             if (target && Object.hasOwn(target, property)) {
-                this._settings.bind(
+                this.#settings.bind(
                     settingKey, 
                     target, 
                     property, 
@@ -731,31 +731,31 @@ export default class OledCareIndicator extends PanelMenu.Button {
      * @param {string} message - Notification message
      * @private
      */
-    _showNotification(title, message) {
+    #showNotification(title, message) {
         try {
-            if (!this._notificationSource || !Main.messageTray) {
-                this._debug('Warning: Notification system not available');
+            if (!this.#notificationSource || !Main.messageTray) {
+                this.#debug('Warning: Notification system not available');
                 return;
             }
             
             const notification = new MessageTray.Notification({
-                source: this._notificationSource,
+                source: this.#notificationSource,
                 title: title,
                 body: message,
                 isTransient: true
             });
             
             try {
-                this._notificationSource.showNotification(notification);
-                this._debug(`Notification shown: ${title} - ${message}`);
+                this.#notificationSource.showNotification(notification);
+                this.#debug(`Notification shown: ${title} - ${message}`);
                 
                 // Track notification in metrics
                 metrics.incrementCounter('notifications', 1, { title });
             } catch (showError) {
-                this._debug(`Failed to show notification: ${showError.message}`);
+                this.#debug(`Failed to show notification: ${showError.message}`);
             }
         } catch (error) {
-            this._debug(`Error creating notification: ${error.message}`);
+            this.#debug(`Error creating notification: ${error.message}`);
         }
     }
 
@@ -766,59 +766,59 @@ export default class OledCareIndicator extends PanelMenu.Button {
         const timer = metrics.startTimer('indicator_destroy');
         
         try {
-            this._debug('Destroying indicator');
+            this.#debug('Destroying indicator');
             
             // Cancel any pending operations
-            this._abortController.abort('Component destruction');
+            this.#abortController.abort('Component destruction');
             
             // Disconnect session mode signal
-            if (this._sessionModeChangedId && this._signalManager) {
-                this._signalManager.disconnect(this._sessionModeChangedId);
-                this._sessionModeChangedId = null;
+            if (this.#sessionModeChangedId && this.#signalManager) {
+                this.#signalManager.disconnect(this.#sessionModeChangedId);
+                this.#sessionModeChangedId = null;
             }
             
             // Disconnect all setting signals
-            if (this._signalManager) {
-                for (const id of this._settingsConnections) {
-                    this._signalManager.disconnect(id);
+            if (this.#signalManager) {
+                for (const id of this.#settingsConnections) {
+                    this.#signalManager.disconnect(id);
                 }
-                this._settingsConnections = [];
+                this.#settingsConnections = [];
             }
             
             // Destroy component managers
             await Promise.allSettled([
-                this._displayManager?.destroy(),
-                this._pixelShift?.destroy(),
-                this._dimming?.destroy(),
-                this._pixelRefresh?.destroy()
+                this.#displayManager?.destroy(),
+                this.#pixelShift?.destroy(),
+                this.#dimming?.destroy(),
+                this.#pixelRefresh?.destroy()
             ]);
             
             // Clean up notification source
-            if (this._notificationSource) {
-                this._notificationSource.destroy();
-                this._notificationSource = null;
+            if (this.#notificationSource) {
+                this.#notificationSource.destroy();
+                this.#notificationSource = null;
             }
             
             // Clean up resource manager
-            if (this._resourceManager) {
-                await this._resourceManager.cleanupAll();
+            if (this.#resourceManager) {
+                await this.#resourceManager.cleanupAll();
             }
             
             // Clean up signal manager
-            if (this._signalManager) {
-                await this._signalManager.disconnectAll();
+            if (this.#signalManager) {
+                await this.#signalManager.disconnectAll();
             }
             
             // Call parent destroy
             super.destroy();
             
-            this._debug('Indicator destroyed');
+            this.#debug('Indicator destroyed');
             timer.stop();
         } catch (error) {
             timer.addLabels({ error: true });
             timer.stop();
             
-            this._debug(`Error destroying indicator: ${error.message}`);
+            this.#debug(`Error destroying indicator: ${error.message}`);
         }
     }
 } 

@@ -1,0 +1,15 @@
+{
+  "spec_dir": "tests",
+  "spec_files": [
+    "unit/test-resourceManager.js",
+    "unit/test-signalManager.js",
+    "unit/test-error-system.js",
+    "unit/test-compatibility.js"
+  ],
+  "helpers": [
+    "unit/mocks/**/*.js",
+    "unit/gi-module-loader.js"
+  ],
+  "stopSpecOnExpectationFailure": false,
+  "random": false
+}

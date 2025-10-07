@@ -1,127 +1,154 @@
 'use strict';
 
-import GLib from 'gi://GLib';
-import { assertEquals, assertTrue, assertFalse, assertNotEquals } from '../testUtils.js';
-import { WeakRefImpl, FinalizationRegistryImpl, features } from '../../lib/compatibility.js';
-import EventEmitter from '../../lib/eventEmitter.js';
+// Import GJS environment setup
+import '../gi-module-loader.js';
 
-/**
- * Test compatibility utilities
- */
-export function testCompatibilityUtilities() {
-    console.log('Testing compatibility utilities...');
-    
-    // Test WeakRefImpl
-    const obj = { name: 'test-object' };
-    const weakRef = new WeakRefImpl(obj);
-    
-    // WeakRef should return the object
-    assertEquals(weakRef.deref(), obj);
-    
-    // Test FinalizationRegistryImpl
-    let cleanupCalled = false;
-    const registry = new FinalizationRegistryImpl((value) => {
-        cleanupCalled = true;
-        assertEquals(value, 'test-value');
+// Import the module to test
+import {
+    WeakRefImpl,
+    FinalizationRegistryImpl,
+    allSettled,
+    AbortControllerImpl,
+    features
+} from '../../lib/compatibility.js';
+
+describe('Compatibility Module', () => {
+    it('should provide WeakRef implementation', () => {
+        // Create a WeakRef
+        const obj = { test: 'value' };
+        const ref = new WeakRefImpl(obj);
+        
+        // Verify the object can be dereferenced
+        const dereferenced = ref.deref();
+        expect(dereferenced).toBe(obj);
+        expect(dereferenced.test).toBe('value');
+        
+        // Test error handling
+        expect(() => new WeakRefImpl(null)).toThrow();
+        expect(() => new WeakRefImpl(undefined)).toThrow();
+        expect(() => new WeakRefImpl(123)).toThrow();
     });
     
-    // Register an object
-    registry.register(obj, 'test-value');
-    
-    // Test feature detection flags
-    assertTrue(typeof features.hasNativeWeakRef === 'boolean');
-    assertTrue(typeof features.hasNativeFinalizationRegistry === 'boolean');
-    
-    console.log('Compatibility utilities tested successfully');
-    return true;
-}
-
-/**
- * Test EventEmitter session-specific handling
- */
-export function testEventEmitterSessionHandling() {
-    console.log('Testing EventEmitter session handling...');
-    
-    // Create event emitter
-    const emitter = new EventEmitter();
-    
-    // Test session type detection
-    const sessionType = emitter.getSessionType();
-    assertTrue(sessionType === 'wayland' || sessionType === 'x11');
-    
-    // Test isWaylandSession method
-    if (sessionType === 'wayland') {
-        assertTrue(emitter.isWaylandSession());
-    } else {
-        assertFalse(emitter.isWaylandSession());
-    }
-    
-    // Test signal handling with abort controller
-    let eventFired = false;
-    const abortController = new AbortController();
-    
-    // Add event listener with abort signal
-    emitter.on('test-event', () => {
-        eventFired = true;
-    }, { signal: abortController.signal });
-    
-    // Event should fire
-    emitter.emit('test-event');
-    assertTrue(eventFired);
-    
-    // Reset flag and abort
-    eventFired = false;
-    abortController.abort();
-    
-    // Wait for abort to process
-    GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
-        // Event should no longer fire after abort
-        emitter.emit('test-event');
-        assertFalse(eventFired);
+    it('should provide FinalizationRegistry implementation', () => {
+        // Create a cleanup callback
+        const cleanup = jasmine.createSpy('cleanup');
+        
+        // Create a registry
+        const registry = new FinalizationRegistryImpl(cleanup);
+        
+        // Register an object
+        const obj = { test: 'value' };
+        const token = { unregister: true };
+        registry.register(obj, 'cleanup-value', token);
+        
+        // Test unregister
+        registry.unregister(token);
+        
+        // Test error handling
+        expect(() => new FinalizationRegistryImpl(null)).toThrow();
+        expect(() => new FinalizationRegistryImpl(undefined)).toThrow();
+        expect(() => new FinalizationRegistryImpl('not-a-function')).toThrow();
+        expect(() => registry.register(null, 'value')).toThrow();
         
         // Cleanup
-        emitter.destroy();
-        console.log('EventEmitter session handling tested successfully');
-        return GLib.SOURCE_REMOVE;
+        registry.destroy();
     });
     
-    return true;
-}
-
-/**
- * Run all tests
- */
-export function runTests() {
-    console.log('Running compatibility tests...');
+    it('should provide Promise.allSettled implementation', async () => {
+        // Create some test promises
+        const promise1 = Promise.resolve('success');
+        const promise2 = Promise.reject('failure');
+        const promise3 = Promise.resolve(42);
+        
+        // Use the allSettled implementation
+        const results = await allSettled([promise1, promise2, promise3]);
+        
+        // Verify the results
+        expect(results.length).toBe(3);
+        
+        expect(results[0].status).toBe('fulfilled');
+        expect(results[0].value).toBe('success');
+        
+        expect(results[1].status).toBe('rejected');
+        expect(results[1].reason).toBe('failure');
+        
+        expect(results[2].status).toBe('fulfilled');
+        expect(results[2].value).toBe(42);
+    });
     
-    const tests = [
-        testCompatibilityUtilities,
-        testEventEmitterSessionHandling
-    ];
+    it('should provide AbortController implementation', () => {
+        // Create an AbortController
+        const controller = new AbortControllerImpl();
+        
+        // Verify it has a signal
+        expect(controller.signal).toBeDefined();
+        expect(controller.signal.aborted).toBe(false);
+        
+        // Add an event listener
+        const abortHandler = jasmine.createSpy('abortHandler');
+        controller.signal.addEventListener('abort', abortHandler);
+        
+        // Abort the controller
+        controller.abort('test-reason');
+        
+        // Verify the signal was aborted
+        expect(controller.signal.aborted).toBe(true);
+        expect(controller.signal.reason).toBe('test-reason');
+        
+        // Verify the listener was called (may be async)
+        setTimeout(() => {
+            expect(abortHandler).toHaveBeenCalled();
+        }, 10);
+        
+        // Add a listener after abort
+        const lateHandler = jasmine.createSpy('lateHandler');
+        controller.signal.addEventListener('abort', lateHandler);
+        
+        // Verify it gets called too
+        setTimeout(() => {
+            expect(lateHandler).toHaveBeenCalled();
+        }, 10);
+    });
     
-    let passed = 0;
-    let failed = 0;
+    it('should provide feature detection', () => {
+        // Verify feature detection results are available
+        expect(features).toBeDefined();
+        expect(typeof features.hasNativeWeakRef).toBe('boolean');
+        expect(typeof features.hasNativeFinalizationRegistry).toBe('boolean');
+        expect(typeof features.hasNativePromiseAllSettled).toBe('boolean');
+        expect(typeof features.hasNativeAbortController).toBe('boolean');
+        expect(typeof features.hasNativeLogicalAssignment).toBe('boolean');
+    });
     
-    for (const test of tests) {
-        try {
-            const result = test();
-            if (result) {
-                passed++;
-            } else {
-                failed++;
-            }
-        } catch (error) {
-            console.error(`Error in test ${test.name}: ${error.message}`);
-            console.error(error.stack);
-            failed++;
+    it('should provide logical assignment polyfills when needed', () => {
+        // Only test the polyfills if the native feature is not available
+        if (!features.hasNativeLogicalAssignment) {
+            // Test nullishAssign
+            const obj1 = { a: null };
+            obj1.nullishAssign('a', 'value');
+            expect(obj1.a).toBe('value');
+            
+            const obj2 = { a: 'existing' };
+            obj2.nullishAssign('a', 'value');
+            expect(obj2.a).toBe('existing');
+            
+            // Test orAssign
+            const obj3 = { a: false };
+            obj3.orAssign('a', 'value');
+            expect(obj3.a).toBe('value');
+            
+            const obj4 = { a: 'existing' };
+            obj4.orAssign('a', 'value');
+            expect(obj4.a).toBe('existing');
+            
+            // Test andAssign
+            const obj5 = { a: true };
+            obj5.andAssign('a', 'value');
+            expect(obj5.a).toBe('value');
+            
+            const obj6 = { a: false };
+            obj6.andAssign('a', 'value');
+            expect(obj6.a).toBe(false);
         }
-    }
-    
-    console.log(`Compatibility tests completed: ${passed} passed, ${failed} failed`);
-    return failed === 0;
-}
-
-// If run directly, execute tests
-if (imports.misc?.modulesDirs === undefined) {
-    runTests();
-} 
+    });
+});

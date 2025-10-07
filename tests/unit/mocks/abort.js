@@ -33,7 +33,7 @@ const getConfig = () => _sessionType === 'wayland' ? WAYLAND_CONFIG : X11_CONFIG
  * Set the mock session type
  * @param {string} sessionType - 'wayland' or 'x11'
  */
-export function setSessionType(sessionType) {
+function setSessionType(sessionType) {
     if (sessionType !== 'wayland' && sessionType !== 'x11') {
         throw new Error(`Invalid session type: ${sessionType}. Must be 'wayland' or 'x11'`);
     }
@@ -49,7 +49,7 @@ export function setSessionType(sessionType) {
  * Enable/disable debug mode
  * @param {boolean} enabled - Whether debug mode is enabled
  */
-export function setDebugMode(enabled) {
+function setDebugMode(enabled) {
     _debugMode = Boolean(enabled);
 }
 
@@ -408,7 +408,6 @@ export {
     MockAbortSignal,
     MockEvent,
     setSessionType,
-    setDebugMode,
     WAYLAND_CONFIG, 
     X11_CONFIG
 }; 
