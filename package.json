@@ -27,6 +27,6 @@
   },
   "homepage": "https://github.com/kimasplund/gnome-oled-shield#readme",
   "devDependencies": {
-    "jasmine": "^5.7.1"
+    "jasmine": "^5.12.0"
   }
 }

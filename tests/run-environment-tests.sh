@@ -50,7 +50,7 @@ run_gjs_test() {
         env_log "Environment: $env_vars"
     fi
     
-    if env $env_vars gjs "$test_script" > "$RESULTS_DIR/${test_name}.log" 2>&1; then
+    if env $env_vars gjs -m "$test_script" > "$RESULTS_DIR/${test_name}.log" 2>&1; then
         success "Test $test_name passed"
     else
         error "Test $test_name failed with code $?"
