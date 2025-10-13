@@ -59,10 +59,13 @@ dist/
 
 **/.claude/settings.local.json
 
+# Claude Code / Cursor IDE files
 .claude/
 .cursor/
 .integrated-reasoning/
-.mcp/
 .cursorrules
 CLAUDE.md
 FIXES_APPLIED.md
+
+# MCP servers
+.mcp/
