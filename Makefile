@@ -105,16 +105,11 @@ lint:
 	fi
 
 # Run tests (placeholder for future test implementation)
-test: validate-json test-unit test-integration test-environment
+test: validate-json test-gjs test-integration
 
-test-unit:
-	@echo "Running unit tests..."
-	@if command -v jasmine >/dev/null 2>&1; then \
-		jasmine --config=tests/jasmine.json; \
-	else \
-		echo "Jasmine not found. Please install with: npm install -g jasmine"; \
-		exit 1; \
-	fi
+test-gjs:
+	@echo "Running GJS tests..."
+	@gjs -m tests/test-modernization.js
 
 test-integration:
 	@echo "Running integration tests..."

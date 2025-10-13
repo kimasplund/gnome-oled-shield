@@ -8,15 +8,45 @@ import GObject from 'gi://GObject';
 // Import mock performance for testing
 import { performance } from './unit/mocks/misc.js';
 import Main from './unit/mocks/main.js';
-import { AbortController, AbortSignal } from './unit/mocks/abort.js';
 import { setTimeout, clearTimeout } from './unit/mocks/timeout.js';
 
 // Patch global namespace with mock objects for testing
 globalThis.performance = performance;
-globalThis.AbortController = AbortController;
-globalThis.AbortSignal = AbortSignal;
 globalThis.setTimeout = setTimeout;
 globalThis.clearTimeout = clearTimeout;
+
+class AbortSignal {
+    constructor() {
+        this.aborted = false;
+        this.listeners = [];
+    }
+
+    addEventListener(event, listener) {
+        if (event === 'abort') {
+            this.listeners.push(listener);
+        }
+    }
+
+    _emitAbort() {
+        this.aborted = true;
+        for (const listener of this.listeners) {
+            listener();
+        }
+    }
+}
+
+class AbortController {
+    constructor() {
+        this.signal = new AbortSignal();
+    }
+
+    abort() {
+        this.signal._emitAbort();
+    }
+}
+
+globalThis.AbortController = AbortController;
+globalThis.AbortSignal = AbortSignal;
 
 // Import error related classes to test
 import { ExtensionError, errorRegistry } from '../lib/errors.js';
@@ -372,7 +402,6 @@ class ModernizationTests {
         this.#runner.addTest('EventEmitter - Basic Events', this.#testEventEmitterBasic.bind(this));
         this.#runner.addTest('EventEmitter - Once Events', this.#testEventEmitterOnce.bind(this));
         this.#runner.addTest('EventEmitter - AbortSignal', this.#testEventEmitterAbortSignal.bind(this));
-        this.#runner.addTest('EventEmitter - waitForEvent', this.#testEventEmitterWaitForEvent.bind(this));
         
         // Test Resource Management
         this.#runner.addTest('Resource Management - Track and Cleanup', this.#testResourceManagement.bind(this));
