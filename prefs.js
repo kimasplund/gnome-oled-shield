@@ -4,22 +4,9 @@ import GObject from 'gi://GObject';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
-// Import modules conditionally based on environment
-const isTestEnv = GLib.getenv('G_TEST_SRCDIR') !== null;
-
-// Import Gtk and Adw conditionally
-let Gtk, Adw;
-try {
-    Gtk = isTestEnv ? null : (await import('gi://Gtk?version=4.0'));
-    Adw = isTestEnv ? (await import('./tests/unit/mocks/adw.js')) : (await import('gi://Adw?version=1'));
-} catch (error) {
-    console.error(`[OLED Care Prefs] Failed to import UI libraries: ${error.message}`);
-    // Return early in case import fails (will be caught in fillPreferencesWindow)
-}
-
-const { ExtensionPreferences } = isTestEnv 
-    ? (await import('./tests/unit/mocks/prefs.js'))
-    : (await import('resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js'));
+import Gtk from 'gi://Gtk?version=4.0';
+import Adw from 'gi://Adw?version=1';
+import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
 /**
  * Enhanced logging function with debug mode awareness
@@ -118,12 +105,6 @@ export default class OledCarePreferences extends ExtensionPreferences {
             const page = new Adw.PreferencesPage();
             window.add(page);
             
-            // In test environment, return early with basic structure
-            if (isTestEnv) {
-                _log('Test environment detected, returning basic window structure', this.#settings);
-                return window;
-            }
-
             // Validate required settings
             if (!this.#validateSettings()) {
                 throw new Error('Settings validation failed');
@@ -137,12 +118,7 @@ export default class OledCarePreferences extends ExtensionPreferences {
         } catch (error) {
             _logError(error, 'fillPreferencesWindow');
             
-            // In test environment, return window even if there's an error
-            if (isTestEnv) {
-                return window;
-            }
-            
-            // For production, create an error message row
+            // Create an error message row
             try {
                 this.#createErrorUI(window, error);
             } catch (secondaryError) {
