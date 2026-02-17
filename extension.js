@@ -540,7 +540,10 @@ export default class OledCareExtension extends BaseExtension {
                 pixelShift: this.#pixelShift,
                 pixelRefresh: this.#pixelRefresh,
                 dimming: this.#dimming,
-                openPreferences: () => this.openPreferences(),
+                openPreferences: () => {
+                    this.openPreferences().catch(e =>
+                        this.#logError('Error opening preferences', e));
+                },
                 extensionDir: this.dir
             });
             
