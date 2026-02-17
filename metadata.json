@@ -3,7 +3,7 @@
     "name": "OLED Care",
     "description": "Protect your OLED displays by applying various screen protection features. Multi-display aware with customizable settings per display.",
     "version": 1,
-    "shell-version": ["46", "47", "48"],
+    "shell-version": ["46", "47", "48", "49"],
     "url": "https://github.com/kimasplund/gnome-oled-shield",
     "settings-schema": "org.gnome.shell.extensions.oled-care",
     "session-modes": ["user", "unlock-dialog"],

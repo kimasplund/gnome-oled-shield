@@ -16,6 +16,9 @@ const Main = isTestEnv
 
 import { Extension as BaseExtension } from 'resource:///org/gnome/shell/extensions/extension.js';
 
+// Import compatibility layer first to register polyfills (AbortController, etc.)
+import './lib/compatibility.js';
+
 // Import feature modules
 import Dimming from './lib/dimming.js';
 import DisplayManager from './lib/displayManager.js';
@@ -125,15 +128,6 @@ export default class OledCareExtension extends BaseExtension {
      * @private
      */
     #initializeErrorReporting() {
-        // Only initialize in non-test environment
-        if (!isTestEnv) {
-            // Handle uncaught promise rejections
-            window.addEventListener('unhandledrejection', event => {
-                this.#logError('Unhandled promise rejection', event.reason);
-                event.preventDefault();
-            }, { signal: this.#abortController.signal });
-        }
-        
         // Set up error listener
         this.#errorListenerId = errorRegistry.addErrorListener(error => {
             // Log critical errors
