@@ -29,14 +29,14 @@ if ! command -v node &> /dev/null; then
 fi
 
 # Check if necessary npm packages are installed
-if ! command -v jasmine &> /dev/null; then
-    echo -e "${YELLOW}Installing Jasmine...${NC}"
-    npm install -g jasmine
+if [ ! -d "node_modules/jasmine" ]; then
+    echo -e "${YELLOW}Installing test dependencies...${NC}"
+    npm install
 fi
 
 # Run tests
 echo -e "${YELLOW}Running tests...${NC}"
-JASMINE_CONFIG_PATH=tests/node-jasmine.json node --experimental-vm-modules node_modules/jasmine/bin/jasmine
+JASMINE_CONFIG_PATH=tests/node-jasmine.json npx --node-arg=--experimental-vm-modules jasmine
 
 # Check result
 if [ $? -eq 0 ]; then

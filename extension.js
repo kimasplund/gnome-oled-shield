@@ -52,30 +52,28 @@ export default class OledCareExtension extends BaseExtension {
         this.INIT_TIMEOUT = 5000;
         
         // Define component configuration for easier management
+        // NOTE: Components are stored in #components Map keyed by their COMPONENTS key
+        // (e.g., 'DIMMING', 'DISPLAY_MANAGER') and synced to private fields after init.
         this.COMPONENTS = Object.freeze({
             DIMMING: {
                 name: 'Dimming',
-                field: '#dimming',
                 class: Dimming,
                 dependencies: [],
                 settingsKey: 'screen-dim-enabled'
             },
             DISPLAY_MANAGER: {
                 name: 'DisplayManager',
-                field: '#displayManager',
                 class: DisplayManager,
                 dependencies: []
             },
             PIXEL_SHIFT: {
                 name: 'PixelShift',
-                field: '#pixelShift',
                 class: PixelShift,
                 dependencies: [],
                 settingsKey: 'pixel-shift-enabled'
             },
             PIXEL_REFRESH: {
                 name: 'PixelRefresh',
-                field: '#pixelRefresh',
                 class: PixelRefresh,
                 dependencies: ['DISPLAY_MANAGER'],
                 settingsKey: 'pixel-refresh-enabled'
@@ -160,7 +158,7 @@ export default class OledCareExtension extends BaseExtension {
         try {
             // Initialize settings
             this.#settings = this.getSettings();
-            
+
             // Set up debug mode for metrics
             this.#debugMode = this.#settings?.get_boolean(OledCareExtension.DEBUG_MODE_KEY) ?? false;
             metrics.setEnabled(this.#debugMode);
@@ -192,42 +190,49 @@ export default class OledCareExtension extends BaseExtension {
             this.#initializeComponentsAsync().then(() => {
                 this.#status = OledCareExtension.STATUS.READY;
                 this.#componentsReady = true;
-                
+
+                // Sync private fields from the components Map
+                this.#dimming = this.#components.get('DIMMING');
+                this.#displayManager = this.#components.get('DISPLAY_MANAGER');
+                this.#pixelShift = this.#components.get('PIXEL_SHIFT');
+                this.#pixelRefresh = this.#components.get('PIXEL_REFRESH');
+
+                // Create and add the panel indicator now that components are ready
+                this.#createIndicator();
+
                 if (this.#indicator) {
                     this.#indicator.updateStatus(OledCareExtension.STATUS.READY);
                 }
-                
+
+                // Connect to settings changes and apply initial settings
+                this.#signalManager.connect(
+                    this.#settings,
+                    'changed',
+                    this.#onSettingsChanged.bind(this),
+                    'settings-changed'
+                );
+                this.#onSettingsChanged();
+
                 // Record the completion of async initialization
                 metrics.incrementCounter('initialization_complete');
                 enableTimer.addLabels({ status: 'success', phase: 'complete' });
                 enableTimer.stop();
-                
+
                 this.#log('OLED Care extension fully initialized');
             }).catch(error => {
                 this.#status = OledCareExtension.STATUS.ERROR;
                 this.#logError('Async initialization error', error);
-                
+
+                // Still create indicator so user can see error status
+                this.#createIndicator();
+
                 if (this.#indicator) {
                     this.#indicator.updateStatus(OledCareExtension.STATUS.ERROR, error);
                 }
-                
+
                 enableTimer.addLabels({ status: 'error', phase: 'async_init_failed' });
                 enableTimer.stop();
             });
-            
-            // Connect to settings changes
-            this.#signalManager.connect(
-                this.#settings,
-                'changed',
-                this.#onSettingsChanged.bind(this),
-                'settings-changed'
-            );
-            
-            // Create and add the panel indicator
-            this.#createIndicator();
-            
-            // Apply initial settings
-            this.#onSettingsChanged();
             
             this.#log('OLED Care extension enabled');
         } catch (error) {
@@ -266,8 +271,6 @@ export default class OledCareExtension extends BaseExtension {
                 return this.#initComponent(component).then(instance => {
                     // Store in the components map
                     this.#components.set(compKey, instance);
-                    // Also store in the class field
-                    this[component.field] = instance;
                     return instance;
                 });
             });
@@ -312,7 +315,7 @@ export default class OledCareExtension extends BaseExtension {
                 // Check if any component failed to initialize
                 const failedComponents = [];
                 for (const [compKey, component] of Object.entries(OledCareExtension.COMPONENTS)) {
-                    if (!this[component.field]) {
+                    if (!this.#components.get(compKey)) {
                         failedComponents.push(compKey);
                     }
                 }
@@ -373,20 +376,15 @@ export default class OledCareExtension extends BaseExtension {
                 this.#log(`Initializing component: ${component.name}`);
                 
                 // Wait for dependencies to be initialized first
+                let deps = [];
                 if (component.dependencies.length > 0) {
                     const depPromises = component.dependencies.map(depKey => {
                         const depComponent = OledCareExtension.COMPONENTS[depKey];
                         return this.#initComponent(depComponent);
                     });
-                    
-                    await Promise.all(depPromises);
+
+                    deps = await Promise.all(depPromises);
                 }
-                
-                // Create component instance with required dependencies
-                const deps = (component.dependencies || []).map(depKey => {
-                    const depComponent = OledCareExtension.COMPONENTS[depKey];
-                    return this[depComponent.field];
-                });
                 
                 const instance = deps.length > 0 
                     ? new component.class(this.#settings, ...deps)
@@ -497,13 +495,14 @@ export default class OledCareExtension extends BaseExtension {
      */
     #createIndicator() {
         try {
-            // Create the indicator
+            // Create the indicator, passing extension dir for icon loading
             this.#indicator = new Indicator(this.#settings, {
                 displayManager: this.#displayManager,
                 pixelShift: this.#pixelShift,
                 pixelRefresh: this.#pixelRefresh,
                 dimming: this.#dimming,
-                openPreferences: () => this.openPreferences()
+                openPreferences: () => this.openPreferences(),
+                extensionDir: this.dir
             });
             
             // Set initial status
@@ -589,7 +588,7 @@ export default class OledCareExtension extends BaseExtension {
         for (const [compKey, component] of Object.entries(OledCareExtension.COMPONENTS)) {
             if (component.settingsKey === key) {
                 const enabled = this.#settings.get_boolean(key);
-                const instance = this[component.field];
+                const instance = this.#components.get(compKey);
                 
                 if (!instance) {
                     this.#log(`Component ${component.name} not available for setting: ${key}`);
@@ -630,8 +629,8 @@ export default class OledCareExtension extends BaseExtension {
         // Apply settings to each component
         for (const [compKey, component] of Object.entries(OledCareExtension.COMPONENTS)) {
             if (!component.settingsKey) continue;
-            
-            const instance = this[component.field];
+
+            const instance = this.#components.get(compKey);
             if (!instance) continue;
             
             const enabled = this.#settings.get_boolean(component.settingsKey);
@@ -685,27 +684,33 @@ export default class OledCareExtension extends BaseExtension {
             
             for (const compKey of componentOrder) {
                 const component = OledCareExtension.COMPONENTS[compKey];
-                const instance = this[component.field];
-                
+                const instance = this.#components.get(compKey);
+
                 if (instance) {
                     try {
                         // Call disable on the component if it has that method
                         if (typeof instance.disable === 'function') {
                             instance.disable();
                         }
-                        
+
                         // Call destroy if available
                         if (typeof instance.destroy === 'function') {
                             instance.destroy();
                         }
-                        
-                        // Remove reference
-                        this[component.field] = null;
+
+                        // Remove reference from the Map
+                        this.#components.delete(compKey);
                     } catch (error) {
                         this.#logError(`Error disabling component ${component.name}`, error);
                     }
                 }
             }
+
+            // Clear private field references
+            this.#dimming = null;
+            this.#displayManager = null;
+            this.#pixelShift = null;
+            this.#pixelRefresh = null;
             
             // Remove indicator
             if (this.#indicator) {
@@ -798,7 +803,7 @@ export default class OledCareExtension extends BaseExtension {
         
         // Add component information
         for (const [compKey, component] of Object.entries(OledCareExtension.COMPONENTS)) {
-            const instance = this[component.field];
+            const instance = this.#components.get(compKey);
             diag.components[compKey] = {
                 available: !!instance,
                 status: instance && typeof instance.getStatus === 'function' ? 

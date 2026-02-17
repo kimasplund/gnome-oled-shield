@@ -29,6 +29,11 @@
             <summary>Dimming Level</summary>
             <description>Percentage of brightness reduction for OLED protection (0-50)</description>
         </key>
+        <key name="display-protection" type="b">
+            <default>true</default>
+            <summary>Display Protection</summary>
+            <description>Enable display protection features for OLED screens</description>
+        </key>
         <key name="pixel-shift-enabled" type="b">
             <default>true</default>
             <summary>Enable Pixel Shift</summary>

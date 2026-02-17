@@ -8,7 +8,7 @@
     "test": "tests"
   },
   "scripts": {
-    "test": "node --experimental-vm-modules node_modules/jasmine/bin/jasmine",
+    "test": "npx --node-arg=--experimental-vm-modules jasmine",
     "test:resource": "npm test tests/unit/test-resourceManager.js",
     "test:signal": "npm test tests/unit/test-signalManager.js",
     "test:error": "npm test tests/unit/test-error-system.js",

@@ -5,7 +5,7 @@ BUILD_DIR = build
 DIST_DIR = dist
 VERSION := $(shell jq -r '.version' metadata.json)
 
-.PHONY: all clean install uninstall package lint test install-dev uninstall-dev restart-shell watch help dev-setup validate-json build
+.PHONY: all clean install install-system uninstall package lint test test-unit test-gjs test-integration test-environment test-pixelshift test-setup install-dev uninstall-dev restart-shell watch help dev-setup validate-json build
 
 all: package
 
@@ -16,9 +16,13 @@ $(DIST_DIR):
 validate-json:
 	@echo "Validating JSON files..."
 	@jq '.' metadata.json > /dev/null
-	@for schema in schemas/*.xml; do \
-		xmllint --noout "$$schema"; \
-	done
+	@if command -v xmllint > /dev/null 2>&1; then \
+		for schema in schemas/*.xml; do \
+			xmllint --noout "$$schema"; \
+		done; \
+	else \
+		echo "Warning: xmllint not found, skipping XML validation"; \
+	fi
 
 # Build target that depends on all build steps
 build: validate-json
@@ -32,6 +36,7 @@ build: validate-json
 		extension.js \
 		prefs.js \
 		metadata.json \
+		stylesheet.css \
 		README.md \
 		lib \
 		$(BUILD_DIR)/
@@ -82,6 +87,13 @@ install-dev: build
 	@chmod -R +r $(EXTENSIONS_PATH)/$(DEV_UUID)
 	@echo "Development version installed. Please restart GNOME Shell (Alt+F2, r, Enter on X11 or re-login on Wayland)"
 
+# System-wide installation
+install-system: build
+	@echo "Installing system-wide..."
+	@sudo mkdir -p /usr/share/gnome-shell/extensions/$(UUID)
+	@sudo cp -r $(BUILD_DIR)/* /usr/share/gnome-shell/extensions/$(UUID)/
+	@echo "System-wide installation complete."
+
 # Uninstall the extension
 uninstall:
 	@echo "Uninstalling extension..."
@@ -98,14 +110,25 @@ uninstall-dev:
 lint:
 	@echo "Running ESLint..."
 	@if command -v eslint >/dev/null 2>&1; then \
-		eslint extension.js prefs.js; \
+		eslint extension.js prefs.js lib/*.js; \
 	else \
 		echo "ESLint not found. Please install with: npm install -g eslint"; \
 		exit 1; \
 	fi
 
-# Run tests (placeholder for future test implementation)
+# Run all tests
 test: validate-json test-gjs test-integration
+
+# Run unit tests with GJS
+test-unit:
+	@echo "Running unit tests..."
+	@gjs -m tests/test-modernization.js
+	@for test in tests/unit/*.js tests/unit/lib/*.js; do \
+		if [ -f "$$test" ]; then \
+			echo "Running $$test..."; \
+			gjs -m "$$test"; \
+		fi; \
+	done
 
 test-gjs:
 	@echo "Running GJS tests..."
@@ -217,8 +240,8 @@ dev-setup-deps:
 		exit 1; \
 	fi
 	@if ! command -v xmllint >/dev/null 2>&1; then \
-		echo "Please install xmllint: sudo apt install libxml2-utils"; \
-		exit 1; \
+		echo "Warning: xmllint not found. Install with: sudo apt install libxml2-utils"; \
+		echo "XML validation will be skipped during build."; \
 	fi
 
 # Watch for changes and rebuild
@@ -241,17 +264,24 @@ restart-shell:
 # Show help
 help:
 	@echo "Available targets:"
-	@echo "  all        - Default target, same as 'package'"
-	@echo "  build      - Build the extension"
-	@echo "  package    - Create a distributable zip package"
-	@echo "  install    - Install the extension locally"
-	@echo "  uninstall  - Remove the installed extension"
-	@echo "  lint       - Run linting checks"
-	@echo "  test       - Run tests (placeholder)"
-	@echo "  clean      - Remove build artifacts"
-	@echo "  dev-setup  - Set up development environment"
-	@echo "  install-dev - Install development version"
-	@echo "  uninstall-dev - Remove development version"
-	@echo "  restart-shell - Restart GNOME Shell (X11 only)"
-	@echo "  watch      - Watch for changes and rebuild"
-	@echo "  help       - Show this help message" 
+	@echo "  all              - Default target, same as 'package'"
+	@echo "  build            - Build the extension"
+	@echo "  package          - Create a distributable zip package"
+	@echo "  install          - Install the extension locally"
+	@echo "  install-system   - Install the extension system-wide"
+	@echo "  install-dev      - Install development version"
+	@echo "  uninstall        - Remove the installed extension"
+	@echo "  uninstall-dev    - Remove development version"
+	@echo "  lint             - Run ESLint on extension.js, prefs.js, and lib/"
+	@echo "  test             - Run all tests (GJS + integration)"
+	@echo "  test-unit        - Run unit tests with GJS"
+	@echo "  test-integration - Run integration tests"
+	@echo "  test-environment - Run environment-specific tests"
+	@echo "  test-pixelshift  - Run pixel shift tests"
+	@echo "  test-setup       - Set up test environment"
+	@echo "  clean            - Remove build artifacts"
+	@echo "  dev-setup        - Set up development environment"
+	@echo "  restart-shell    - Restart GNOME Shell (X11 only)"
+	@echo "  watch            - Watch for changes and rebuild"
+	@echo "  validate-json    - Validate JSON and XML schema files"
+	@echo "  help             - Show this help message" 

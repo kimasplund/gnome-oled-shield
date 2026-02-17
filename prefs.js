@@ -114,9 +114,6 @@ export default class OledCarePreferences extends ExtensionPreferences {
             }
             _log('Settings loaded', this.#settings);
 
-            // Enable debug logging for development
-            this.#settings.set_boolean(OledCarePreferences.DEBUG_MODE_KEY, true);
-            
             // Create a preferences page
             const page = new Adw.PreferencesPage();
             window.add(page);

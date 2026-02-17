@@ -9,7 +9,10 @@ import {
     FinalizationRegistryImpl,
     allSettled,
     AbortControllerImpl,
-    features
+    features,
+    nullishAssign,
+    orAssign,
+    andAssign
 } from '../../lib/compatibility.js';
 
 describe('Compatibility Module', () => {
@@ -120,35 +123,32 @@ describe('Compatibility Module', () => {
         expect(typeof features.hasNativeLogicalAssignment).toBe('boolean');
     });
     
-    it('should provide logical assignment polyfills when needed', () => {
-        // Only test the polyfills if the native feature is not available
-        if (!features.hasNativeLogicalAssignment) {
-            // Test nullishAssign
-            const obj1 = { a: null };
-            obj1.nullishAssign('a', 'value');
-            expect(obj1.a).toBe('value');
-            
-            const obj2 = { a: 'existing' };
-            obj2.nullishAssign('a', 'value');
-            expect(obj2.a).toBe('existing');
-            
-            // Test orAssign
-            const obj3 = { a: false };
-            obj3.orAssign('a', 'value');
-            expect(obj3.a).toBe('value');
-            
-            const obj4 = { a: 'existing' };
-            obj4.orAssign('a', 'value');
-            expect(obj4.a).toBe('existing');
-            
-            // Test andAssign
-            const obj5 = { a: true };
-            obj5.andAssign('a', 'value');
-            expect(obj5.a).toBe('value');
-            
-            const obj6 = { a: false };
-            obj6.andAssign('a', 'value');
-            expect(obj6.a).toBe(false);
-        }
+    it('should provide logical assignment helper functions', () => {
+        // Test nullishAssign
+        const obj1 = { a: null };
+        nullishAssign(obj1, 'a', 'value');
+        expect(obj1.a).toBe('value');
+
+        const obj2 = { a: 'existing' };
+        nullishAssign(obj2, 'a', 'value');
+        expect(obj2.a).toBe('existing');
+
+        // Test orAssign
+        const obj3 = { a: false };
+        orAssign(obj3, 'a', 'value');
+        expect(obj3.a).toBe('value');
+
+        const obj4 = { a: 'existing' };
+        orAssign(obj4, 'a', 'value');
+        expect(obj4.a).toBe('existing');
+
+        // Test andAssign
+        const obj5 = { a: true };
+        andAssign(obj5, 'a', 'value');
+        expect(obj5.a).toBe('value');
+
+        const obj6 = { a: false };
+        andAssign(obj6, 'a', 'value');
+        expect(obj6.a).toBe(false);
     });
 });
