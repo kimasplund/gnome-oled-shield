@@ -67,6 +67,11 @@
             <summary>Enable True Black Background</summary>
             <description>Set desktop background to true black (#000000) to turn off unused OLED pixels</description>
         </key>
+        <key name="true-black-saved-background" type="s">
+            <default>''</default>
+            <summary>Saved Background Settings</summary>
+            <description>JSON backup of desktop background settings before true black was applied</description>
+        </key>
         <key name="autohide-top-panel" type="b">
             <default>false</default>
             <summary>Auto-hide Top Panel</summary>

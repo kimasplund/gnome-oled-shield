@@ -3,7 +3,10 @@
 import GObject from 'gi://GObject';
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
+import Meta from 'gi://Meta';
+import Clutter from 'gi://Clutter';
 import St from 'gi://St';
+import Shell from 'gi://Shell';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
@@ -92,25 +95,36 @@ export default class OledCareExtension extends BaseExtension {
         });
     }
     
-    // Private fields using true private syntax
-    #dimming = null;
-    #displayManager = null;
-    #pixelShift = null;
-    #pixelRefresh = null;
-    #settings = null;
-    #indicator = null;
-    #signalManager = null;
-    #resourceManager = null;
-    #componentsReady = false;
-    #hasErrors = false;
-    #status = OledCareExtension.STATUS.INITIALIZING;
-    #abortController = new AbortController();
-    #debugMode = false;
-    #components = new Map();
-    #initPromises = new Map();
-    #metricsCallbackId = null;
-    #errorListenerId = null;
-    #resourceBundle = null;
+    // Private field declarations (initializers moved to constructor for GObject compatibility)
+    #dimming;
+    #displayManager;
+    #pixelShift;
+    #pixelRefresh;
+    #settings;
+    #indicator;
+    #signalManager;
+    #resourceManager;
+    #componentsReady;
+    #hasErrors;
+    #status;
+    #abortController;
+    #debugMode;
+    #components;
+    #initPromises;
+    #metricsCallbackId;
+    #errorListenerId;
+    #resourceBundle;
+    #bgSettings;
+    #panelHidden;
+    #dashHidden;
+    #savedPanelHeight;
+    #panelBarrier;
+    #panelPressure;
+    #panelHideTimeoutId;
+    #panelShowTimeoutId;
+    #unfocusDimEnabled;
+    #unfocusDimEffects;
+    #focusWindowId;
 
     /**
      * Constructor for the extension
@@ -118,7 +132,38 @@ export default class OledCareExtension extends BaseExtension {
      */
     constructor(metadata) {
         super(metadata);
-        
+
+        // Initialize fields in constructor (class field initializers don't run in GObject classes)
+        this.#dimming = null;
+        this.#displayManager = null;
+        this.#pixelShift = null;
+        this.#pixelRefresh = null;
+        this.#settings = null;
+        this.#indicator = null;
+        this.#signalManager = null;
+        this.#resourceManager = null;
+        this.#componentsReady = false;
+        this.#hasErrors = false;
+        this.#status = OledCareExtension.STATUS.INITIALIZING;
+        this.#abortController = new AbortController();
+        this.#debugMode = false;
+        this.#components = new Map();
+        this.#initPromises = new Map();
+        this.#metricsCallbackId = null;
+        this.#errorListenerId = null;
+        this.#resourceBundle = null;
+        this.#bgSettings = null;
+        this.#panelHidden = false;
+        this.#dashHidden = false;
+        this.#savedPanelHeight = -1;
+        this.#panelBarrier = null;
+        this.#panelPressure = null;
+        this.#panelHideTimeoutId = null;
+        this.#panelShowTimeoutId = null;
+        this.#unfocusDimEnabled = false;
+        this.#unfocusDimEffects = new Map();
+        this.#focusWindowId = null;
+
         // Initialize error handling
         this.#initializeErrorReporting();
     }
@@ -505,15 +550,8 @@ export default class OledCareExtension extends BaseExtension {
             // Add the indicator to the panel
             Main.panel.addToStatusArea(OledCareExtension.EXTENSION_ID, this.#indicator);
             
-            // Connect indicator events
-            if (typeof this.#indicator.on === 'function') {
-                this.#indicator.on('open-prefs', () => this.openPrefs());
-                this.#indicator.on('refresh-now', () => {
-                    if (this.#pixelRefresh && typeof this.#pixelRefresh.refreshNow === 'function') {
-                        this.#pixelRefresh.refreshNow();
-                    }
-                });
-            }
+            // Note: Indicator extends PanelMenu.Button (not EventEmitter),
+            // so event-based communication is handled via GSettings signals instead.
         } catch (error) {
             this.#logError('Error creating indicator', error);
             
@@ -568,13 +606,65 @@ export default class OledCareExtension extends BaseExtension {
         if (key === OledCareExtension.DEBUG_MODE_KEY) {
             this.#debugMode = this.#settings.get_boolean(key);
             metrics.setEnabled(this.#debugMode);
-            
+
             if (this.#debugMode) {
                 metrics.startFrameWatching();
             } else {
                 metrics.stopFrameWatching();
             }
-            
+
+            return;
+        }
+
+        // Handle true black background toggle
+        if (key === 'true-black-background') {
+            const enabled = this.#settings.get_boolean(key);
+            if (enabled) {
+                this.#enableTrueBlackBackground();
+            } else {
+                this.#restoreBackground();
+            }
+            return;
+        }
+
+        // Handle autohide top panel toggle
+        if (key === 'autohide-top-panel') {
+            const enabled = this.#settings.get_boolean(key);
+            if (enabled) {
+                this.#hideTopPanel();
+            } else {
+                this.#showTopPanel();
+            }
+            return;
+        }
+
+        // Handle unfocus dim toggle
+        if (key === 'unfocus-dim-enabled') {
+            const enabled = this.#settings.get_boolean(key);
+            if (enabled) {
+                this.#enableUnfocusDim();
+            } else {
+                this.#disableUnfocusDim();
+            }
+            return;
+        }
+
+        // Handle unfocus dim level change
+        if (key === 'unfocus-dim-level') {
+            if (this.#unfocusDimEnabled) {
+                this.#updateUnfocusDimLevel();
+            }
+            return;
+        }
+
+        // Handle autohide dash toggle
+        if (key === 'autohide-dash') {
+            const enabled = this.#settings.get_boolean(key);
+            if (enabled) {
+                this.#hideDash();
+            } else {
+                this.#showDash();
+            }
             return;
         }
         
@@ -644,7 +734,479 @@ export default class OledCareExtension extends BaseExtension {
             }
         }
         
+        // Apply true black background if enabled
+        if (this.#settings.get_boolean('true-black-background')) {
+            this.#enableTrueBlackBackground();
+        }
+
+        // Apply unfocus dim settings
+        if (this.#settings.get_boolean('unfocus-dim-enabled')) {
+            this.#enableUnfocusDim();
+        } else {
+            this.#disableUnfocusDim();
+        }
+
+        // Apply autohide settings
+        if (this.#settings.get_boolean('autohide-top-panel')) {
+            this.#hideTopPanel();
+        } else {
+            this.#showTopPanel();
+        }
+
+        if (this.#settings.get_boolean('autohide-dash')) {
+            this.#hideDash();
+        } else {
+            this.#showDash();
+        }
+
         this.#log('Applied all settings');
+    }
+
+    /**
+     * Enable true black background by saving current settings and applying solid black
+     * @private
+     */
+    #enableTrueBlackBackground() {
+        try {
+            if (!this.#bgSettings) {
+                this.#bgSettings = new Gio.Settings({ schema: 'org.gnome.desktop.background' });
+            }
+
+            // Save current background settings (only if we haven't already)
+            const savedJson = this.#settings.get_string('true-black-saved-background');
+            if (!savedJson) {
+                const backup = {
+                    'picture-uri': this.#bgSettings.get_string('picture-uri'),
+                    'picture-uri-dark': this.#bgSettings.get_string('picture-uri-dark'),
+                    'picture-options': this.#bgSettings.get_string('picture-options'),
+                    'primary-color': this.#bgSettings.get_string('primary-color'),
+                    'secondary-color': this.#bgSettings.get_string('secondary-color'),
+                    'color-shading-type': this.#bgSettings.get_string('color-shading-type'),
+                };
+                this.#settings.set_string('true-black-saved-background', JSON.stringify(backup));
+                this.#log('Saved background settings backup');
+            }
+
+            // Apply true black
+            this.#bgSettings.set_string('picture-options', 'none');
+            this.#bgSettings.set_string('primary-color', '#000000');
+            this.#bgSettings.set_string('secondary-color', '#000000');
+            this.#bgSettings.set_string('color-shading-type', 'solid');
+            this.#log('Applied true black background');
+        } catch (error) {
+            this.#logError('Failed to apply true black background', error);
+        }
+    }
+
+    /**
+     * Restore the original background settings
+     * @private
+     */
+    #restoreBackground() {
+        try {
+            if (!this.#bgSettings) {
+                this.#bgSettings = new Gio.Settings({ schema: 'org.gnome.desktop.background' });
+            }
+
+            const savedJson = this.#settings.get_string('true-black-saved-background');
+            if (!savedJson) {
+                this.#log('No saved background settings to restore');
+                return;
+            }
+
+            const backup = JSON.parse(savedJson);
+            for (const [key, value] of Object.entries(backup)) {
+                this.#bgSettings.set_string(key, value);
+            }
+
+            // Clear the saved backup
+            this.#settings.set_string('true-black-saved-background', '');
+            this.#log('Restored background settings');
+        } catch (error) {
+            this.#logError('Failed to restore background', error);
+        }
+    }
+
+    /**
+     * Enable auto-hide for the top panel.
+     * Panel slides out, moving the mouse to the top edge brings it back.
+     * @private
+     */
+    #hideTopPanel() {
+        if (this.#panelHidden) return;
+        try {
+            const panel = Main.panel;
+            if (!panel) return;
+
+            // Save original height for restoration
+            if (this.#savedPanelHeight < 0) {
+                this.#savedPanelHeight = panel.height;
+            }
+
+            this.#panelHidden = true;
+
+            // Set up a pressure barrier at the top edge so mouse hover reveals the panel
+            this.#setupPanelBarrier();
+
+            // Connect to panel enter/leave for auto-show/hide
+            panel.connect('enter-event', () => {
+                this.#cancelPanelHideTimeout();
+            });
+            panel.connect('leave-event', () => {
+                this.#schedulePanelHide();
+            });
+
+            // Initially hide
+            this.#panelSlideOut();
+            this.#log('Top panel auto-hide enabled');
+        } catch (error) {
+            this.#logError('Failed to enable panel auto-hide', error);
+        }
+    }
+
+    /**
+     * Disable auto-hide, permanently show the top panel
+     * @private
+     */
+    #showTopPanel() {
+        if (!this.#panelHidden) return;
+        try {
+            this.#cancelPanelHideTimeout();
+            this.#cancelPanelShowTimeout();
+            this.#destroyPanelBarrier();
+
+            const panel = Main.panel;
+            if (panel) {
+                panel.ease({
+                    y: 0,
+                    duration: 200,
+                    mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+                });
+                panel.reactive = true;
+            }
+
+            // Restore struts so windows don't overlap the panel
+            Main.layoutManager.panelBox.set_height(this.#savedPanelHeight > 0 ? this.#savedPanelHeight : -1);
+
+            this.#panelHidden = false;
+            this.#log('Top panel shown');
+        } catch (error) {
+            this.#logError('Failed to show top panel', error);
+        }
+    }
+
+    /**
+     * Slide the panel off-screen (upward)
+     * @private
+     */
+    #panelSlideOut() {
+        const panel = Main.panel;
+        if (!panel) return;
+
+        const panelHeight = this.#savedPanelHeight > 0 ? this.#savedPanelHeight : panel.height;
+
+        panel.ease({
+            y: -panelHeight,
+            duration: 200,
+            mode: Clutter.AnimationMode.EASE_IN_QUAD,
+        });
+
+        // Collapse the panel box so windows use the full screen
+        Main.layoutManager.panelBox.set_height(0);
+    }
+
+    /**
+     * Slide the panel back on-screen
+     * @private
+     */
+    #panelSlideIn() {
+        const panel = Main.panel;
+        if (!panel) return;
+
+        const panelHeight = this.#savedPanelHeight > 0 ? this.#savedPanelHeight : panel.height;
+        Main.layoutManager.panelBox.set_height(panelHeight);
+
+        panel.ease({
+            y: 0,
+            duration: 200,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+        });
+    }
+
+    /**
+     * Create a pressure barrier at the top screen edge to trigger panel reveal
+     * @private
+     */
+    #setupPanelBarrier() {
+        this.#destroyPanelBarrier();
+
+        // Create a Meta.Barrier along the top edge
+        const monitor = Main.layoutManager.primaryMonitor;
+        if (!monitor) return;
+
+        this.#panelBarrier = new Meta.Barrier({
+            display: global.display,
+            x1: monitor.x,
+            y1: monitor.y,
+            x2: monitor.x + monitor.width,
+            y2: monitor.y,
+            directions: Meta.BarrierDirection.POSITIVE_Y,
+        });
+
+        // Use Shell.PressureBarrier for hot-edge detection
+        this.#panelPressure = new Shell.PressureBarrier(
+            100,    // threshold (pressure units)
+            1000,   // timeout (ms)
+            Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW
+        );
+
+        this.#panelPressure.addBarrier(this.#panelBarrier);
+        this.#panelPressure.connect('trigger', () => {
+            this.#cancelPanelShowTimeout();
+            this.#panelSlideIn();
+            // Auto-hide again after the mouse leaves
+            this.#schedulePanelHide();
+        });
+    }
+
+    /**
+     * Clean up the pressure barrier
+     * @private
+     */
+    #destroyPanelBarrier() {
+        if (this.#panelPressure) {
+            if (this.#panelBarrier) {
+                this.#panelPressure.removeBarrier(this.#panelBarrier);
+            }
+            this.#panelPressure = null;
+        }
+        if (this.#panelBarrier) {
+            this.#panelBarrier.destroy();
+            this.#panelBarrier = null;
+        }
+    }
+
+    /**
+     * Schedule the panel to hide after a delay
+     * @private
+     */
+    #schedulePanelHide() {
+        this.#cancelPanelHideTimeout();
+        if (!this.#panelHidden) return;
+
+        this.#panelHideTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1500, () => {
+            this.#panelHideTimeoutId = null;
+
+            // Only hide if cursor isn't on the panel
+            const [, pointerY] = global.get_pointer();
+            const panelHeight = this.#savedPanelHeight > 0 ? this.#savedPanelHeight : Main.panel.height;
+            if (pointerY > panelHeight) {
+                this.#panelSlideOut();
+            } else {
+                // Cursor still on panel, reschedule
+                this.#schedulePanelHide();
+            }
+
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    #cancelPanelHideTimeout() {
+        if (this.#panelHideTimeoutId !== null) {
+            GLib.source_remove(this.#panelHideTimeoutId);
+            this.#panelHideTimeoutId = null;
+        }
+    }
+
+    #cancelPanelShowTimeout() {
+        if (this.#panelShowTimeoutId !== null) {
+            GLib.source_remove(this.#panelShowTimeoutId);
+            this.#panelShowTimeoutId = null;
+        }
+    }
+
+    /**
+     * Hide the dash/dock to reduce OLED wear
+     * @private
+     */
+    #hideDash() {
+        if (this.#dashHidden) return;
+        try {
+            // Hide the overview dash
+            const dash = Main.overview?.dash;
+            if (dash) {
+                dash.hide();
+            }
+
+            // Also handle Ubuntu Dock / Dash to Dock if present
+            const dockSettings = this.#getDockSettings();
+            if (dockSettings) {
+                dockSettings.set_boolean('dock-fixed', false);
+                dockSettings.set_boolean('autohide', true);
+                dockSettings.set_int('intellihide-mode', 0); // ALL_WINDOWS - most aggressive hide
+            }
+
+            this.#dashHidden = true;
+            this.#log('Dash hidden');
+        } catch (error) {
+            this.#logError('Failed to hide dash', error);
+        }
+    }
+
+    /**
+     * Show the dash/dock
+     * @private
+     */
+    #showDash() {
+        if (!this.#dashHidden) return;
+        try {
+            const dash = Main.overview?.dash;
+            if (dash) {
+                dash.show();
+            }
+
+            // Restore Ubuntu Dock / Dash to Dock defaults
+            const dockSettings = this.#getDockSettings();
+            if (dockSettings) {
+                dockSettings.reset('dock-fixed');
+                dockSettings.reset('autohide');
+                dockSettings.reset('intellihide-mode');
+            }
+
+            this.#dashHidden = false;
+            this.#log('Dash shown');
+        } catch (error) {
+            this.#logError('Failed to show dash', error);
+        }
+    }
+
+    /**
+     * Get GSettings for Ubuntu Dock / Dash to Dock if available
+     * @returns {Gio.Settings|null}
+     * @private
+     */
+    #getDockSettings() {
+        try {
+            const schemas = Gio.Settings.list_schemas();
+            if (schemas.includes('org.gnome.shell.extensions.dash-to-dock')) {
+                return new Gio.Settings({ schema: 'org.gnome.shell.extensions.dash-to-dock' });
+            }
+        } catch {
+            // No dock extension installed
+        }
+        return null;
+    }
+
+    /**
+     * Enable unfocused window dimming
+     * @private
+     */
+    #enableUnfocusDim() {
+        if (this.#unfocusDimEnabled) return;
+        try {
+            this.#unfocusDimEnabled = true;
+
+            // Connect to focus-window changes
+            const display = global.display;
+            this.#focusWindowId = display.connect('notify::focus-window', () => {
+                this.#onFocusWindowChanged();
+            });
+
+            // Apply to current windows
+            this.#onFocusWindowChanged();
+            this.#log('Unfocus dim enabled');
+        } catch (error) {
+            this.#logError('Failed to enable unfocus dim', error);
+        }
+    }
+
+    /**
+     * Disable unfocused window dimming and remove all effects
+     * @private
+     */
+    #disableUnfocusDim() {
+        if (!this.#unfocusDimEnabled) return;
+        try {
+            // Disconnect focus signal
+            if (this.#focusWindowId !== null) {
+                global.display.disconnect(this.#focusWindowId);
+                this.#focusWindowId = null;
+            }
+
+            // Remove all dimming effects
+            for (const [actor, effect] of this.#unfocusDimEffects) {
+                try {
+                    actor.remove_effect(effect);
+                } catch {
+                    // Actor may have been destroyed
+                }
+            }
+            this.#unfocusDimEffects.clear();
+
+            this.#unfocusDimEnabled = false;
+            this.#log('Unfocus dim disabled');
+        } catch (error) {
+            this.#logError('Failed to disable unfocus dim', error);
+        }
+    }
+
+    /**
+     * Handle focus window change - dim unfocused, undim focused
+     * @private
+     */
+    #onFocusWindowChanged() {
+        if (!this.#unfocusDimEnabled) return;
+
+        const focusWindow = global.display.focus_window;
+        const dimLevel = this.#settings?.get_int('unfocus-dim-level') ?? 15;
+        // Convert percentage (0-40) to brightness value (-1.0 to 0.0)
+        const brightness = -(dimLevel / 100);
+
+        // Get all window actors
+        const windowActors = global.get_window_actors();
+
+        for (const actor of windowActors) {
+            const metaWindow = actor.get_meta_window();
+            if (!metaWindow) continue;
+
+            // Skip non-normal windows (like docks, panels, etc.)
+            const windowType = metaWindow.get_window_type();
+            if (windowType !== 0) continue; // 0 = META_WINDOW_NORMAL
+
+            const isFocused = metaWindow === focusWindow;
+            const existingEffect = this.#unfocusDimEffects.get(actor);
+
+            if (isFocused) {
+                // Remove dim effect from focused window
+                if (existingEffect) {
+                    actor.remove_effect(existingEffect);
+                    this.#unfocusDimEffects.delete(actor);
+                }
+            } else {
+                // Apply or update dim effect on unfocused window
+                if (existingEffect) {
+                    existingEffect.set_brightness_full(brightness, brightness, brightness);
+                } else {
+                    const effect = new Clutter.BrightnessContrastEffect();
+                    effect.set_brightness_full(brightness, brightness, brightness);
+                    actor.add_effect(effect);
+                    this.#unfocusDimEffects.set(actor, effect);
+                }
+            }
+        }
+    }
+
+    /**
+     * Update dim level on all currently dimmed windows
+     * @private
+     */
+    #updateUnfocusDimLevel() {
+        const dimLevel = this.#settings?.get_int('unfocus-dim-level') ?? 15;
+        const brightness = -(dimLevel / 100);
+
+        for (const [, effect] of this.#unfocusDimEffects) {
+            effect.set_brightness_full(brightness, brightness, brightness);
+        }
     }
 
     /**
@@ -657,7 +1219,20 @@ export default class OledCareExtension extends BaseExtension {
             
             this.#log('Disabling OLED Care extension');
             this.#status = OledCareExtension.STATUS.DISABLED;
-            
+
+            // Restore background if true black was active
+            if (this.#settings?.get_boolean('true-black-background')) {
+                this.#restoreBackground();
+            }
+            this.#bgSettings = null;
+
+            // Restore panel and dash if hidden
+            this.#showTopPanel();
+            this.#showDash();
+
+            // Remove unfocus dimming
+            this.#disableUnfocusDim();
+
             // Disconnect error listener
             if (this.#errorListenerId) {
                 errorRegistry.removeErrorListener(this.#errorListenerId);
